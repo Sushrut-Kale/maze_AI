@@ -231,7 +231,55 @@ struct CompResult {
 static std::vector<CompResult> compResults;
 
 // ════════════════════════════════════════════════════════════
-// ── UI BUTTONS ──────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════
+// ── SIDEBAR COORDINATE & LAYOUT SYSTEM ──────────────────────
+// ════════════════════════════════════════════════════════════
+struct SidebarLayout {
+    float scrollY     = 0.f;
+    float maxScrollY  = 0.f;
+
+    float sideX       = 0.f;
+    float sideW       = SIDEBAR_W;
+    float pad         = 14.f;
+    float x           = 0.f;
+    float fullW       = 0.f;
+    float halfW       = 0.f;
+    float thirdW      = 0.f;
+    float col2X       = 0.f;
+    float th2X        = 0.f;
+    float th3X        = 0.f;
+
+    // Phase 1 section anchors
+    float p1HeaderY   = 0.f;
+    float p1GenSecY   = 0.f;
+    float p1CustSecY  = 0.f;
+    float p1LegendY   = 0.f;
+    float p1NavY      = 0.f;
+
+    // Phase 2 section anchors
+    float p2HeaderY      = 0.f;
+    float p2ToolsSecY    = 0.f;
+    float p2SummarySecY  = 0.f;
+    float p2SummaryCardY = 0.f;
+    float p2ActionsSecY  = 0.f;
+    float p2LegendY      = 0.f;
+    float p2NavSecY      = 0.f;
+
+    // Phase 3 section anchors
+    float p3HeaderY      = 0.f;
+    float p3TargetSecY   = 0.f;
+    float p3TargetCardY  = 0.f;
+    float p3AlgSecY      = 0.f;
+    float p3ExecSecY     = 0.f;
+    float p3ResultsSecY  = 0.f;
+    float p3ResultsCardY = 0.f;
+    float p3CompareY     = 0.f;
+    float p3NavY         = 0.f;
+};
+static SidebarLayout sideLayout;
+
+// ════════════════════════════════════════════════════════════
+// ── UI BUTTONS & LAYOUT SYSTEM ──────────────────────────────
 // ════════════════════════════════════════════════════════════
 // Top Header
 static Button btnTopHelp, btnTopLegend;
@@ -270,97 +318,121 @@ static Button btnHelpBack, btnLegendBack, btnBackToWorkflow;
 static std::vector<Button*> allButtons;
 
 // ════════════════════════════════════════════════════════════
-// ── INITIALIZE UI BUTTON LAYOUT ─────────────────────────────
+// ── UPDATE UI LAYOUT & BUTTON HITBOXES ──────────────────────
 // ════════════════════════════════════════════════════════════
-static void initButtonLayout() {
+static void updateUILayout() {
     allButtons.clear();
     btnCustChips.clear();
 
-    float sideX  = (float)(WIN_W - SIDEBAR_W) + 16.f;
-    float fullW  = SIDEBAR_W - 32.f;
-    float halfW  = (fullW - 8.f) * 0.5f;
-    float thirdW = (fullW - 12.f) / 3.f;
-    float col2X  = sideX + halfW + 8.f;
-    float th2X   = sideX + thirdW + 6.f;
-    float th3X   = sideX + 2.f * (thirdW + 6.f);
+    // Geometric constants
+    sideLayout.sideX   = (float)(WIN_W - SIDEBAR_W);
+    sideLayout.sideW   = SIDEBAR_W;
+    sideLayout.pad     = 14.f;
+    sideLayout.x       = sideLayout.sideX + sideLayout.pad;
+    sideLayout.fullW   = SIDEBAR_W - (sideLayout.pad * 2.f);
+    sideLayout.halfW   = (sideLayout.fullW - 8.f) * 0.5f;
+    sideLayout.thirdW  = (sideLayout.fullW - 12.f) / 3.f;
+    sideLayout.col2X   = sideLayout.x + sideLayout.halfW + 8.f;
+    sideLayout.th2X    = sideLayout.x + sideLayout.thirdW + 6.f;
+    sideLayout.th3X    = sideLayout.x + 2.f * (sideLayout.thirdW + 6.f);
 
-    // Top Header Buttons
-    btnTopLegend = Button((float)WIN_W - 170.f, 10.f, 76.f, 26.f, "Legend");
-    btnTopHelp   = Button((float)WIN_W - 86.f,  10.f, 70.f, 26.f, "Help");
+    float x      = sideLayout.x;
+    float fullW  = sideLayout.fullW;
+    float halfW  = sideLayout.halfW;
+    float thirdW = sideLayout.thirdW;
+    float col2X  = sideLayout.col2X;
+    float th2X   = sideLayout.th2X;
+    float th3X   = sideLayout.th3X;
+
+    // Top Header Buttons (Right Anchored)
+    btnTopLegend = Button((float)WIN_W - 156.f, 11.f, 72.f, 26.f, "Legend");
+    btnTopHelp   = Button((float)WIN_W - 76.f,  11.f, 64.f, 26.f, "Help");
     allButtons.push_back(&btnTopLegend);
     allButtons.push_back(&btnTopHelp);
 
     // ────────────────────────────────────────────────────────
     // Phase 1 Setup: Create Maze & Manage Customers
     // ────────────────────────────────────────────────────────
-    float y1 = HEADER_H + 12.f;
-    y1 += 54.f; // Space for Phase 1 header card
+    float y1 = HEADER_H + 10.f;
+    sideLayout.p1HeaderY = y1;
+    y1 += 50.f; // Phase 1 header card (h=44) + gap
 
-    // Grid Dimensions
-    btnSzSm = Button(sideX, y1, thirdW, 26.f, "15x15");
-    btnSzMd = Button(th2X,  y1, thirdW, 26.f, "20x20");
-    btnSzLg = Button(th3X,  y1, thirdW, 26.f, "25x25");
-    y1 += 32.f;
+    sideLayout.p1GenSecY = y1; // "MAZE & GENERATOR"
+    y1 += 12.f;
 
-    // Generator method
-    btnGenDFS  = Button(sideX, y1, halfW, 26.f, "DFS Grid");
-    btnGenPrim = Button(col2X, y1, halfW, 26.f, "Prim Branch");
-    y1 += 32.f;
+    btnSzSm = Button(x,    y1, thirdW, 24.f, "15x15");
+    btnSzMd = Button(th2X, y1, thirdW, 24.f, "20x20");
+    btnSzLg = Button(th3X, y1, thirdW, 24.f, "25x25");
+    y1 += 28.f;
 
-    // Actions
-    btnGenerate = Button(sideX, y1, halfW, 28.f, "Generate Maze"); btnGenerate.setGreen();
-    btnNewSeed  = Button(col2X, y1, halfW, 28.f, "New / Reset");   btnNewSeed.setNeutral();
-    y1 += 34.f;
+    btnGenDFS  = Button(x,     y1, halfW, 24.f, "DFS Grid");
+    btnGenPrim = Button(col2X, y1, halfW, 24.f, "Prim Branch");
+    y1 += 28.f;
 
-    // Demo Scenarios
-    btnScenA = Button(sideX, y1, thirdW, 24.f, "Scen A");
-    btnScenB = Button(th2X,  y1, thirdW, 24.f, "Scen B");
-    btnScenC = Button(th3X,  y1, thirdW, 24.f, "Scen C");
+    btnGenerate = Button(x,     y1, halfW, 26.f, "Generate Maze"); btnGenerate.setGreen();
+    btnNewSeed  = Button(col2X, y1, halfW, 26.f, "New / Reset");   btnNewSeed.setNeutral();
     y1 += 30.f;
 
-    // Wall editing tools
-    btnToggleWallEdit = Button(sideX, y1, halfW, 26.f, "Edit Walls");
-    btnClearWalls     = Button(col2X, y1, halfW, 26.f, "Open Grid");
-    y1 += 38.f;
+    btnScenA = Button(x,    y1, thirdW, 22.f, "Scen A");
+    btnScenB = Button(th2X, y1, thirdW, 22.f, "Scen B");
+    btnScenC = Button(th3X, y1, thirdW, 22.f, "Scen C");
+    y1 += 26.f;
 
-    // Customer Management Panel
-    y1 += 14.f; // Customer section title space
-    btnModeSingle = Button(sideX, y1, halfW, 26.f, "Single Target");
-    btnModeMulti  = Button(col2X, y1, halfW, 26.f, "Multi-Stop");
+    btnToggleWallEdit = Button(x,     y1, halfW, 24.f, "Edit Walls");
+    btnClearWalls     = Button(col2X, y1, halfW, 24.f, "Open Grid");
     y1 += 32.f;
 
-    // Customer selection chips (up to 10 customers, 5 per row)
+    // Customer Management Section
+    sideLayout.p1CustSecY = y1; // "CUSTOMERS (N/10)"
+    y1 += 12.f;
+
+    btnModeSingle = Button(x,     y1, halfW, 24.f, "Single Target");
+    btnModeMulti  = Button(col2X, y1, halfW, 24.f, "Multi-Stop");
+    y1 += 28.f;
+
+    // Customer Chips (up to 10 customers, 5 per row)
     float chipW = (fullW - 16.f) / 5.f;
     for (size_t i = 0; i < maze.customers.size() && i < 10; i++) {
-        int rowIdx = (int)i / 5;
-        int colIdx = (int)i % 5;
-        float cx = sideX + colIdx * (chipW + 4.f);
-        float cy = y1 + rowIdx * 28.f;
-        Button chip(cx, cy, chipW, 24.f, maze.customers[i].label().c_str());
+        int rIdx = (int)i / 5;
+        int cIdx = (int)i % 5;
+        float cx = x + cIdx * (chipW + 4.f);
+        float cy = y1 + rIdx * 25.f;
+        Button chip(cx, cy, chipW, 22.f, maze.customers[i].label().c_str());
         if (maze.customers[i].id == maze.selectedCustomerId) chip.setBlue();
         btnCustChips.push_back(chip);
     }
     int chipRows = ((int)maze.customers.size() + 4) / 5;
     if (chipRows < 1) chipRows = 1;
-    y1 += chipRows * 28.f + 4.f;
+    y1 += chipRows * 25.f + 4.f;
 
-    // Customer actions: Add, Move, Remove
-    btnCustAdd    = Button(sideX, y1, thirdW, 26.f, "+ Add");     btnCustAdd.setGreen();
-    btnCustMove   = Button(th2X,  y1, thirdW, 26.f, "Move");     btnCustMove.setNeutral();
-    btnCustRemove = Button(th3X,  y1, thirdW, 26.f, "Delete");   btnCustRemove.setRed();
-    y1 += 32.f;
+    // Customer Actions: + Add, Move, Delete
+    btnCustAdd    = Button(x,    y1, thirdW, 24.f, "+ Add");   btnCustAdd.setGreen();
+    btnCustMove   = Button(th2X, y1, thirdW, 24.f, "Move");   btnCustMove.setNeutral();
+    btnCustRemove = Button(th3X, y1, thirdW, 24.f, "Delete"); btnCustRemove.setRed();
+    y1 += 28.f;
 
-    // Multi-stop reordering buttons
-    btnCustUp   = Button(sideX, y1, halfW, 24.f, "Move Up");
-    btnCustDown = Button(col2X, y1, halfW, 24.f, "Move Down");
-    y1 += 34.f;
+    // Reordering / Sequence space
+    if (deliveryMode == DeliveryMode::MULTI_STOP) {
+        btnCustUp   = Button(x,     y1, halfW, 22.f, "Move Up");
+        btnCustDown = Button(col2X, y1, halfW, 22.f, "Move Down");
+        y1 += 26.f;
+        y1 += 26.f; // Space for sequence label + text
+    } else {
+        btnCustUp   = Button(x,     y1, halfW, 22.f, "Move Up");
+        btnCustDown = Button(col2X, y1, halfW, 22.f, "Move Down");
+        btnCustUp.visible = false;
+        btnCustDown.visible = false;
+        y1 += 18.f; // Space for single target label
+    }
 
-    // Grid Legend occupies y1 to y1 + 72px
-    y1 += 82.f;
+    y1 += 6.f;
+    sideLayout.p1LegendY = y1; // Grid Legend (h=66)
+    y1 += 76.f;
 
-    // Navigation
-    btnPhase1Continue = Button(sideX, y1, fullW, 36.f, "CONTINUE TO ROAD CONFIG ->");
+    sideLayout.p1NavY = y1; // Workflow Navigation
+    btnPhase1Continue = Button(x, y1, fullW, 34.f, "CONTINUE TO ROAD CONFIG ->");
     btnPhase1Continue.setGreen();
+    y1 += 42.f;
 
     allButtons.push_back(&btnSzSm); allButtons.push_back(&btnSzMd); allButtons.push_back(&btnSzLg);
     allButtons.push_back(&btnGenDFS); allButtons.push_back(&btnGenPrim);
@@ -378,32 +450,39 @@ static void initButtonLayout() {
     // ────────────────────────────────────────────────────────
     // Phase 2 Setup: Configure Roads
     // ────────────────────────────────────────────────────────
-    float y2 = HEADER_H + 12.f;
-    y2 += 64.f; // Space for Phase 2 header card
+    float y2 = HEADER_H + 10.f;
+    sideLayout.p2HeaderY = y2;
+    y2 += 52.f; // Phase 2 header (h=44) + gap
 
-    // Road Tools (2-Column Grid)
+    sideLayout.p2ToolsSecY = y2; // "ROAD TOOLS"
     y2 += 12.f;
-    btnToolReward    = Button(sideX, y2, halfW, 30.f, "Reward · 0.5");  btnToolReward.setGreen();
-    btnToolPenalty   = Button(col2X, y2, halfW, 30.f, "Penalty · 4.0"); btnToolPenalty.setRed();
-    y2 += 36.f;
-    btnToolCongested = Button(sideX, y2, halfW, 30.f, "Congested · 2.0"); btnToolCongested.setAmber();
-    btnToolNormal    = Button(col2X, y2, halfW, 30.f, "Normal / Erase"); btnToolNormal.setNeutral();
-    y2 += 42.f;
+    btnToolReward    = Button(x,     y2, halfW, 28.f, "Reward · 0.5");  btnToolReward.setGreen();
+    btnToolPenalty   = Button(col2X, y2, halfW, 28.f, "Penalty · 4.0"); btnToolPenalty.setRed();
+    y2 += 32.f;
+    btnToolCongested = Button(x,     y2, halfW, 28.f, "Congested · 2.0"); btnToolCongested.setAmber();
+    btnToolNormal    = Button(col2X, y2, halfW, 28.f, "Normal / Erase"); btnToolNormal.setNeutral();
+    y2 += 34.f;
 
-    // Pellet Summary Card occupies y2 to y2 + 74px
-    y2 += 86.f;
-
-    // Configuration Actions
+    sideLayout.p2SummarySecY = y2; // "PELLET SUMMARY"
     y2 += 12.f;
-    btnUndoPellet   = Button(sideX, y2, halfW, 28.f, "Undo Last");     btnUndoPellet.setNeutral();
-    btnClearPellets = Button(col2X, y2, halfW, 28.f, "Clear Pellets"); btnClearPellets.setRed();
-    y2 += 40.f;
+    sideLayout.p2SummaryCardY = y2; // Summary panel (h=64)
+    y2 += 72.f;
 
-    // Workflow Navigation
+    sideLayout.p2ActionsSecY = y2; // "ACTIONS"
     y2 += 12.f;
-    btnPhase2Continue = Button(sideX, y2, fullW, 36.f, "CONTINUE TO SOLVING ->"); btnPhase2Continue.setPrimary();
-    y2 += 44.f;
-    btnPhase2Back     = Button(sideX, y2, fullW, 28.f, "<- BACK TO MAZE CREATION"); btnPhase2Back.setNeutral();
+    btnUndoPellet   = Button(x,     y2, halfW, 26.f, "Undo Last");     btnUndoPellet.setNeutral();
+    btnClearPellets = Button(col2X, y2, halfW, 26.f, "Clear Pellets"); btnClearPellets.setRed();
+    y2 += 32.f;
+
+    sideLayout.p2LegendY = y2; // Terrain Cost Legend (h=66)
+    y2 += 76.f;
+
+    sideLayout.p2NavSecY = y2; // "WORKFLOW NAVIGATION"
+    y2 += 12.f;
+    btnPhase2Continue = Button(x, y2, fullW, 34.f, "CONTINUE TO SOLVING ->"); btnPhase2Continue.setPrimary();
+    y2 += 38.f;
+    btnPhase2Back     = Button(x, y2, fullW, 26.f, "<- BACK TO MAZE CREATION"); btnPhase2Back.setNeutral();
+    y2 += 34.f;
 
     allButtons.push_back(&btnToolReward); allButtons.push_back(&btnToolPenalty);
     allButtons.push_back(&btnToolCongested); allButtons.push_back(&btnToolNormal);
@@ -413,38 +492,48 @@ static void initButtonLayout() {
     // ────────────────────────────────────────────────────────
     // Phase 3 Setup: Solve and Compare
     // ────────────────────────────────────────────────────────
-    float y3 = HEADER_H + 12.f;
-    y3 += 64.f; // Space for Phase 3 header card
+    float y3 = HEADER_H + 10.f;
+    sideLayout.p3HeaderY = y3;
+    y3 += 52.f; // Phase 3 header (h=44) + gap
 
-    // Algorithm selection
+    sideLayout.p3TargetSecY = y3; // "DELIVERY TARGET"
     y3 += 12.f;
-    btnSelBFS   = Button(sideX, y3, fullW, 28.f, "BFS -- Fewest Moves");        y3 += 32.f;
-    btnSelDFS   = Button(sideX, y3, fullW, 28.f, "DFS -- Depth-First");         y3 += 32.f;
-    btnSelAStar = Button(sideX, y3, fullW, 28.f, "A* -- Lowest Weighted Cost"); btnSelAStar.setBlue(); y3 += 36.f;
+    sideLayout.p3TargetCardY = y3; // Target panel (h=40)
+    y3 += 46.f;
 
-    // Execution Controls
+    sideLayout.p3AlgSecY = y3; // "ALGORITHM"
     y3 += 12.f;
-    btnRun         = Button(sideX, y3, halfW, 30.f, "Run Search");   btnRun.setGreen();
-    btnResetSearch = Button(col2X, y3, halfW, 30.f, "Reset Search"); btnResetSearch.setNeutral();
-    y3 += 36.f;
+    btnSelBFS   = Button(x, y3, fullW, 24.f, "BFS -- Fewest Moves");        y3 += 28.f;
+    btnSelDFS   = Button(x, y3, fullW, 24.f, "DFS -- Depth-First");         y3 += 28.f;
+    btnSelAStar = Button(x, y3, fullW, 24.f, "A* -- Lowest Weighted Cost"); btnSelAStar.setBlue(); y3 += 30.f;
 
-    btnStep  = Button(sideX, y3, halfW, 28.f, "Step");
-    btnPause = Button(col2X, y3, halfW, 28.f, "Pause / Resume");
-    y3 += 34.f;
+    sideLayout.p3ExecSecY = y3; // "EXECUTION CONTROLS"
+    y3 += 12.f;
+    btnRun         = Button(x,     y3, halfW, 26.f, "Run Search");   btnRun.setGreen();
+    btnResetSearch = Button(col2X, y3, halfW, 26.f, "Reset Search"); btnResetSearch.setNeutral();
+    y3 += 30.f;
 
-    btnAnimateRoute = Button(sideX, y3, halfW, 28.f, "Animate Van"); btnAnimateRoute.setAmber();
-    btnStopAnim     = Button(col2X, y3, halfW, 28.f, "Stop Anim");
+    btnStep  = Button(x,     y3, halfW, 24.f, "Step");
+    btnPause = Button(col2X, y3, halfW, 24.f, "Pause / Resume");
+    y3 += 28.f;
+
+    btnAnimateRoute = Button(x,     y3, halfW, 24.f, "Animate Van"); btnAnimateRoute.setAmber();
+    btnStopAnim     = Button(col2X, y3, halfW, 24.f, "Stop Anim");
+    y3 += 32.f;
+
+    sideLayout.p3ResultsSecY = y3; // "RESULTS"
+    y3 += 12.f;
+    sideLayout.p3ResultsCardY = y3; // Results card (h=122)
+    y3 += 130.f;
+
+    sideLayout.p3CompareY = y3; // Compare All
+    btnCompareAll = Button(x, y3, fullW, 32.f, "COMPARE ALL (BFS, DFS, A*)"); btnCompareAll.setPrimary();
     y3 += 38.f;
 
-    // Results Card occupies y3 to y3 + 130px
-    y3 += 144.f;
-
-    // Navigation
-    y3 += 12.f;
-    btnCompareAll = Button(sideX, y3, fullW, 36.f, "COMPARE ALL (BFS, DFS, A*)"); btnCompareAll.setPrimary();
-    y3 += 44.f;
-    btnPhase3BackToConfig = Button(sideX, y3, halfW, 28.f, "<- Road Config");
-    btnPhase3NewMaze      = Button(col2X, y3, halfW, 28.f, "New Network");
+    sideLayout.p3NavY = y3; // Navigation
+    btnPhase3BackToConfig = Button(x,     y3, halfW, 26.f, "<- Road Config");
+    btnPhase3NewMaze      = Button(col2X, y3, halfW, 26.f, "New Network");
+    y3 += 34.f;
 
     allButtons.push_back(&btnSelBFS); allButtons.push_back(&btnSelDFS); allButtons.push_back(&btnSelAStar);
     allButtons.push_back(&btnRun); allButtons.push_back(&btnResetSearch);
@@ -454,17 +543,36 @@ static void initButtonLayout() {
     allButtons.push_back(&btnPhase3BackToConfig); allButtons.push_back(&btnPhase3NewMaze);
 
     // Modal / Screen Return Buttons
-    btnHelpBack   = Button((float)WIN_W * 0.5f - 80.f, (float)WIN_H - 52.f, 160.f, 32.f, "RETURN");
-    btnLegendBack = Button((float)WIN_W * 0.5f - 80.f, (float)WIN_H - 52.f, 160.f, 32.f, "RETURN");
-    btnBackToWorkflow = Button((float)WIN_W * 0.5f - 110.f, (float)WIN_H - 52.f, 220.f, 34.f, "RETURN TO SOLVING");
+    btnHelpBack       = Button((float)WIN_W * 0.5f - 80.f, (float)WIN_H - 46.f, 160.f, 30.f, "RETURN");
+    btnLegendBack     = Button((float)WIN_W * 0.5f - 80.f, (float)WIN_H - 46.f, 160.f, 30.f, "RETURN");
+    btnBackToWorkflow = Button((float)WIN_W * 0.5f - 110.f, (float)WIN_H - 46.f, 220.f, 32.f, "RETURN TO SOLVING");
     btnBackToWorkflow.setGreen();
 
     allButtons.push_back(&btnHelpBack);
     allButtons.push_back(&btnLegendBack);
     allButtons.push_back(&btnBackToWorkflow);
+
+    // Calculate maximum scroll range for current phase
+    float totalH = 0.f;
+    if (currentPhase == AppPhase::PHASE_1_CREATE)      totalH = y1 - HEADER_H;
+    else if (currentPhase == AppPhase::PHASE_2_CONFIG) totalH = y2 - HEADER_H;
+    else if (currentPhase == AppPhase::PHASE_3_SOLVE)  totalH = y3 - HEADER_H;
+
+    float availH = (float)(WIN_H - HEADER_H);
+    if (totalH > availH) {
+        sideLayout.maxScrollY = totalH - availH + 16.f;
+    } else {
+        sideLayout.maxScrollY = 0.f;
+        sideLayout.scrollY    = 0.f;
+    }
+    if (sideLayout.scrollY > sideLayout.maxScrollY) sideLayout.scrollY = sideLayout.maxScrollY;
+    if (sideLayout.scrollY < 0.f)                  sideLayout.scrollY = 0.f;
 }
 
-// ════════════════════════════════════════════════════════════
+static void initButtonLayout() {
+    updateUILayout();
+}
+
 // ── FACTORY HELPERS ─────────────────────────────────────────
 // ════════════════════════════════════════════════════════════
 static MazeGenerator* getGen() {
@@ -799,10 +907,12 @@ static void handleSidebarClick(float mx, float my) {
         else if (btnModeSingle.isClicked(mx, my)) {
             deliveryMode = DeliveryMode::SINGLE_TARGET;
             statusMsg = "Delivery Mode: Single Customer target.";
+            updateUILayout();
         }
         else if (btnModeMulti.isClicked(mx, my)) {
             deliveryMode = DeliveryMode::MULTI_STOP;
             statusMsg = "Delivery Mode: Multi-Stop route following configured stop order.";
+            updateUILayout();
         }
         else if (btnCustAdd.isClicked(mx, my)) {
             if ((int)maze.customers.size() >= 10) {
@@ -839,6 +949,7 @@ static void handleSidebarClick(float mx, float my) {
             if (it != deliveryOrder.end() && it != deliveryOrder.begin()) {
                 std::iter_swap(it, it - 1);
                 statusMsg = "Moved C" + std::to_string(maze.selectedCustomerId) + " earlier in stop order.";
+                updateUILayout();
             }
         }
         else if (btnCustDown.isClicked(mx, my)) {
@@ -846,6 +957,7 @@ static void handleSidebarClick(float mx, float my) {
             if (it != deliveryOrder.end() && it + 1 != deliveryOrder.end()) {
                 std::iter_swap(it, it + 1);
                 statusMsg = "Moved C" + std::to_string(maze.selectedCustomerId) + " later in stop order.";
+                updateUILayout();
             }
         }
         else {
@@ -875,6 +987,8 @@ static void handleSidebarClick(float mx, float my) {
             wallEditActive    = false;
             custPlacementTool = CustPlacementTool::NONE;
             currentPhase      = AppPhase::PHASE_2_CONFIG;
+            sideLayout.scrollY = 0.f;
+            updateUILayout();
             statusMsg         = "Phase 2: Configure Reward (0.5), Congested (2.0) or Penalty (4.0) roads.";
         }
     }
@@ -905,10 +1019,14 @@ static void handleSidebarClick(float mx, float my) {
         }
         else if (btnPhase2Continue.isClicked(mx, my)) {
             currentPhase = AppPhase::PHASE_3_SOLVE;
+            sideLayout.scrollY = 0.f;
+            updateUILayout();
             statusMsg = "Phase 3: Select an algorithm and click Run Search.";
         }
         else if (btnPhase2Back.isClicked(mx, my)) {
             currentPhase = AppPhase::PHASE_1_CREATE;
+            sideLayout.scrollY = 0.f;
+            updateUILayout();
             statusMsg = "Returned to Phase 1. Road network and customers preserved.";
         }
     }
@@ -935,34 +1053,48 @@ static void handleSidebarClick(float mx, float my) {
             maze.resetSearch();
             riderActive  = false;
             currentPhase = AppPhase::PHASE_2_CONFIG;
+            sideLayout.scrollY = 0.f;
+            updateUILayout();
             statusMsg    = "Returned to Phase 2. Pellets and customer stops preserved.";
         }
         else if (btnPhase3NewMaze.isClicked(mx, my)) {
             maze.resetSearch();
             riderActive  = false;
             currentPhase = AppPhase::PHASE_1_CREATE;
+            sideLayout.scrollY = 0.f;
+            updateUILayout();
             statusMsg    = "Returned to Phase 1: Create a new road network.";
         }
     }
 }
 
 // ════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
 // ── TOP HEADER RENDERING ────────────────────────────────────
 // ════════════════════════════════════════════════════════════
 static void renderHeader() {
     drawPanel(0.f, 0.f, (float)WIN_W, HEADER_H, Col::HEADER_BG, Col::BORDER, 1.0f);
 
-    float tx = 18.f, ty = 20.f;
+    float tx = 16.f, ty = 28.f;
     glColor3fv(Col::TITLE_CYAN);
     drawBitmapText(tx, ty, "SmartRoute AI", GLUT_BITMAP_HELVETICA_18);
-    int tw = glutBitmapLength(GLUT_BITMAP_HELVETICA_18, (const unsigned char*)"SmartRoute AI");
+    int titleW = glutBitmapLength(GLUT_BITMAP_HELVETICA_18, (const unsigned char*)"SmartRoute AI");
 
-    glColor3fv(Col::TEXT_MUTED);
-    drawBitmapText(tx + (float)tw + 12.f, ty, "|  Intelligent Last-Mile Delivery Optimizer", GLUT_BITMAP_HELVETICA_12);
+    float subX = tx + (float)titleW + 12.f;
+    if (WIN_W >= 1150) {
+        glColor3fv(Col::TEXT_MUTED);
+        drawBitmapText(subX, ty, "|  Intelligent Delivery Optimizer", GLUT_BITMAP_HELVETICA_12);
+        subX += (float)glutBitmapLength(GLUT_BITMAP_HELVETICA_12, (const unsigned char*)"|  Intelligent Delivery Optimizer") + 16.f;
+    } else if (WIN_W >= 980) {
+        glColor3fv(Col::TEXT_MUTED);
+        drawBitmapText(subX, ty, "|  Delivery Optimizer", GLUT_BITMAP_HELVETICA_12);
+        subX += (float)glutBitmapLength(GLUT_BITMAP_HELVETICA_12, (const unsigned char*)"|  Delivery Optimizer") + 16.f;
+    }
 
     // Phase Indicator Chip
-    float pBadgeX = tx + (float)tw + 340.f;
-    const char* pBadgeText = "PHASE 1: CREATE ROAD NETWORK";
+    float pBadgeX = subX;
+    float pBadgeW = 186.f;
+    const char* pBadgeText = "PHASE 1: CREATE MAZE";
     const float* pBadgeCol = Col::PRIMARY_BLUE;
     if (currentPhase == AppPhase::PHASE_2_CONFIG) {
         pBadgeText = "PHASE 2: CONFIGURE ROADS";
@@ -971,25 +1103,39 @@ static void renderHeader() {
         pBadgeText = "PHASE 3: SOLVE & COMPARE";
         pBadgeCol  = Col::TITLE_CYAN;
     }
-    drawPanel(pBadgeX, 10.f, 210.f, 26.f, Col::CARD_BG, pBadgeCol, 1.5f);
-    glColor3fv(pBadgeCol);
-    drawBitmapText(pBadgeX + 12.f, 27.f, pBadgeText, GLUT_BITMAP_HELVETICA_12);
 
-    // Status / Error message
-    float sx = pBadgeX + 225.f;
-    if (!errorMsg.empty() && errTimer > 0.f) {
-        glColor3fv(Col::RED_PENALTY);
-        drawBitmapText(sx, ty + 1.f, errorMsg.c_str(), GLUT_BITMAP_HELVETICA_12);
+    // Header buttons boundary (Legend starts at WIN_W - 156.f)
+    float rightEdge = (float)WIN_W - 166.f;
+
+    if (pBadgeX + pBadgeW + 16.f < rightEdge) {
+        drawPanel(pBadgeX, 11.f, pBadgeW, 26.f, Col::CARD_BG, pBadgeCol, 1.5f);
+        glColor3fv(pBadgeCol);
+        drawBitmapText(pBadgeX + 10.f, 28.f, pBadgeText, GLUT_BITMAP_HELVETICA_10);
+
+        float statusX = pBadgeX + pBadgeW + 14.f;
+        float availStatusW = rightEdge - statusX - 10.f;
+        if (availStatusW > 60.f) {
+            if (!errorMsg.empty() && errTimer > 0.f) {
+                drawTextTruncated(statusX, ty, errorMsg, availStatusW, GLUT_BITMAP_HELVETICA_12, Col::RED_PENALTY);
+            } else {
+                drawTextTruncated(statusX, ty, statusMsg, availStatusW, GLUT_BITMAP_HELVETICA_12, Col::TEXT_WHITE);
+            }
+        }
     } else {
-        glColor3fv(Col::TEXT_WHITE);
-        drawBitmapText(sx, ty + 1.f, statusMsg.c_str(), GLUT_BITMAP_HELVETICA_12);
+        float availStatusW = rightEdge - subX - 10.f;
+        if (availStatusW > 60.f) {
+            if (!errorMsg.empty() && errTimer > 0.f) {
+                drawTextTruncated(subX, ty, errorMsg, availStatusW, GLUT_BITMAP_HELVETICA_12, Col::RED_PENALTY);
+            } else {
+                drawTextTruncated(subX, ty, statusMsg, availStatusW, GLUT_BITMAP_HELVETICA_12, Col::TEXT_WHITE);
+            }
+        }
     }
 
     btnTopLegend.draw();
     btnTopHelp.draw();
 }
 
-// ════════════════════════════════════════════════════════════
 // ── MAZE CANVAS RENDERING ───────────────────────────────────
 // ════════════════════════════════════════════════════════════
 static void renderCell(int row, int col) {
@@ -1185,87 +1331,86 @@ static void renderDeliveryVan() {
 }
 
 // ════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
 // ── SIDEBAR RENDERING ───────────────────────────────────────
 // ════════════════════════════════════════════════════════════
 static void renderSidebar() {
-    float sideX = (float)(WIN_W - SIDEBAR_W);
+    float sideX = sideLayout.sideX;
+    float x     = sideLayout.x;
+    float fullW = sideLayout.fullW;
+
+    // Sidebar Background Base
     drawPanel(sideX, HEADER_H, SIDEBAR_W, (float)(WIN_H - HEADER_H), Col::SIDEBAR_BG, Col::BORDER, 1.0f);
 
-    float x = sideX + 16.f;
-    float fullW = SIDEBAR_W - 32.f;
+    // Enable scissor test so scrolling content never leaks into header or outside sidebar
+    glEnable(GL_SCISSOR_TEST);
+    glScissor((int)sideX, 0, (int)SIDEBAR_W, (int)(WIN_H - HEADER_H));
+
+    glPushMatrix();
+    glTranslatef(0.f, -sideLayout.scrollY, 0.f);
 
     // ────────────────────────────────────────────────────────
     // PHASE 1 — CREATE ROAD NETWORK & DESTINATIONS
     // ────────────────────────────────────────────────────────
     if (currentPhase == AppPhase::PHASE_1_CREATE) {
-        float y = HEADER_H + 12.f;
-        drawPhaseHeader(x, y, fullW, "PHASE 1", "CREATE ROAD NETWORK",
+        drawPhaseHeader(x, sideLayout.p1HeaderY, fullW, "PHASE 1", "CREATE ROAD NETWORK",
                         "Generate street grid, set Store & Customers.");
-        y += 64.f;
 
         // 1. Grid & Generator
-        drawSectionHeader(x, y, "MAZE & GENERATOR"); y += 12.f;
+        drawSectionHeader(x, sideLayout.p1GenSecY, "MAZE & GENERATOR");
         btnSzSm.selected = (selSize == MazeSizeE::SMALL);
         btnSzMd.selected = (selSize == MazeSizeE::MEDIUM);
         btnSzLg.selected = (selSize == MazeSizeE::LARGE);
-        btnSzSm.draw(); btnSzMd.draw(); btnSzLg.draw(); y += 32.f;
+        btnSzSm.draw(); btnSzMd.draw(); btnSzLg.draw();
 
         btnGenDFS.selected  = (selGen == GenType::DFS_GRID);
         btnGenPrim.selected = (selGen == GenType::PRIM_BRANCH);
-        btnGenDFS.draw(); btnGenPrim.draw(); y += 32.f;
+        btnGenDFS.draw(); btnGenPrim.draw();
 
-        btnGenerate.draw(); btnNewSeed.draw(); y += 34.f;
+        btnGenerate.draw(); btnNewSeed.draw();
 
-        // Scenarios
         btnScenA.selected = (activeScenario == ScenarioE::A_SIMPLE); btnScenA.draw();
         btnScenB.selected = (activeScenario == ScenarioE::B_REWARD); btnScenB.draw();
-        btnScenC.selected = (activeScenario == ScenarioE::C_PENALTY); btnScenC.draw(); y += 30.f;
+        btnScenC.selected = (activeScenario == ScenarioE::C_PENALTY); btnScenC.draw();
 
         btnToggleWallEdit.selected = wallEditActive;
-        btnToggleWallEdit.draw(); btnClearWalls.draw(); y += 36.f;
+        btnToggleWallEdit.draw(); btnClearWalls.draw();
 
         // 2. Customer Management Panel
         std::string custHdr = "CUSTOMERS (" + std::to_string(maze.customers.size()) + "/10)";
-        drawSectionHeader(x, y, custHdr.c_str()); y += 12.f;
+        drawSectionHeader(x, sideLayout.p1CustSecY, custHdr.c_str());
 
         btnModeSingle.selected = (deliveryMode == DeliveryMode::SINGLE_TARGET);
         btnModeMulti.selected  = (deliveryMode == DeliveryMode::MULTI_STOP);
-        btnModeSingle.draw(); btnModeMulti.draw(); y += 32.f;
+        btnModeSingle.draw(); btnModeMulti.draw();
 
-        // Customer selection chips
         for (size_t i = 0; i < btnCustChips.size(); i++) {
             btnCustChips[i].draw();
         }
-        int chipRows = ((int)maze.customers.size() + 4) / 5;
-        if (chipRows < 1) chipRows = 1;
-        y += chipRows * 28.f + 4.f;
 
         btnCustAdd.selected  = (custPlacementTool == CustPlacementTool::ADD_CUST);
         btnCustMove.selected = (custPlacementTool == CustPlacementTool::MOVE_CUST);
-        btnCustAdd.draw(); btnCustMove.draw(); btnCustRemove.draw(); y += 32.f;
+        btnCustAdd.draw(); btnCustMove.draw(); btnCustRemove.draw();
 
         if (deliveryMode == DeliveryMode::MULTI_STOP) {
-            btnCustUp.draw(); btnCustDown.draw(); y += 32.f;
-            // Stop sequence display
+            btnCustUp.draw(); btnCustDown.draw();
+            float seqY = btnCustUp.y + 26.f;
             glColor3fv(Col::TEXT_MUTED);
-            drawBitmapText(x, y, "Delivery Route Sequence:", GLUT_BITMAP_HELVETICA_10); y += 14.f;
-
+            drawBitmapText(x, seqY, "Delivery Route Sequence:", GLUT_BITMAP_HELVETICA_10);
             std::string seq = "Store";
             for (int cid : deliveryOrder) {
                 const Customer* c = maze.getCustomer(cid);
                 if (c && c->active) seq += " -> " + c->label();
             }
-            glColor3fv(Col::ACCENT);
-            drawBitmapText(x + 4.f, y, seq.c_str(), GLUT_BITMAP_HELVETICA_10); y += 18.f;
+            drawTextTruncated(x + 4.f, seqY + 14.f, seq, fullW - 8.f, GLUT_BITMAP_HELVETICA_10, Col::ACCENT);
         } else {
-            glColor3fv(Col::TEXT_MUTED);
-            std::string selStr = "Selected Target: C" + std::to_string(maze.selectedCustomerId);
-            drawBitmapText(x, y + 4.f, selStr.c_str(), GLUT_BITMAP_HELVETICA_10);
-            y += 24.f;
+            float tgtY = btnCustAdd.y + 28.f + 14.f;
+            std::string selStr = "Selected Target: Customer C" + std::to_string(maze.selectedCustomerId);
+            drawTextTruncated(x, tgtY, selStr, fullW, GLUT_BITMAP_HELVETICA_10, Col::TEXT_MUTED);
         }
 
         // 3. Grid Legend
-        drawGridLegend(x, y, fullW); y += 82.f;
+        drawGridLegend(x, sideLayout.p1LegendY, fullW);
 
         // 4. Navigation
         btnPhase1Continue.draw();
@@ -1275,136 +1420,136 @@ static void renderSidebar() {
     // PHASE 2 — CONFIGURE REWARD & PENALTY ROADS
     // ────────────────────────────────────────────────────────
     else if (currentPhase == AppPhase::PHASE_2_CONFIG) {
-        float y = HEADER_H + 12.f;
-        drawPhaseHeader(x, y, fullW, "PHASE 2", "CONFIGURE ROADS",
+        drawPhaseHeader(x, sideLayout.p2HeaderY, fullW, "PHASE 2", "CONFIGURE ROADS",
                         "Select a tool, then click road cells",
                         "to assign delivery travel costs.");
-        y += 74.f;
 
         // 1. Road Tools (2-Column Grid)
-        drawSectionHeader(x, y, "ROAD TOOLS"); y += 12.f;
+        drawSectionHeader(x, sideLayout.p2ToolsSecY, "ROAD TOOLS");
         btnToolReward.selected    = (pelletTool == PelletTool::REWARD_05);
         btnToolPenalty.selected   = (pelletTool == PelletTool::PENALTY_40);
         btnToolCongested.selected = (pelletTool == PelletTool::CONGESTED_20);
         btnToolNormal.selected    = (pelletTool == PelletTool::NORMAL_10);
 
-        btnToolReward.draw(); btnToolPenalty.draw(); y += 36.f;
-        btnToolCongested.draw(); btnToolNormal.draw(); y += 42.f;
+        btnToolReward.draw(); btnToolPenalty.draw();
+        btnToolCongested.draw(); btnToolNormal.draw();
 
         // 2. Pellet Summary Card
-        drawSectionHeader(x, y, "PELLET SUMMARY"); y += 12.f;
-        drawPanel(x, y, fullW, 74.f, Col::CARD_BG, Col::BORDER, 1.0f);
-        drawMetricRow(x + 12.f, y + 20.f, fullW - 24.f, "Reward Pellets (0.5):",
+        drawSectionHeader(x, sideLayout.p2SummarySecY, "PELLET SUMMARY");
+        drawPanel(x, sideLayout.p2SummaryCardY, fullW, 64.f, Col::CARD_BG, Col::BORDER, 1.0f);
+        drawMetricRow(x + 10.f, sideLayout.p2SummaryCardY + 18.f, fullW - 20.f, "Reward Pellets (0.5):",
                       std::to_string(maze.countRewardPellets()).c_str(),
                       Col::TEXT_MUTED, Col::GREEN_REWARD, GLUT_BITMAP_HELVETICA_10);
-        drawMetricRow(x + 12.f, y + 40.f, fullW - 24.f, "Penalty Pellets (4.0):",
+        drawMetricRow(x + 10.f, sideLayout.p2SummaryCardY + 36.f, fullW - 20.f, "Penalty Pellets (4.0):",
                       std::to_string(maze.countPenaltyPellets()).c_str(),
                       Col::TEXT_MUTED, Col::RED_PENALTY, GLUT_BITMAP_HELVETICA_10);
-        drawMetricRow(x + 12.f, y + 60.f, fullW - 24.f, "Congested Roads (2.0):",
+        drawMetricRow(x + 10.f, sideLayout.p2SummaryCardY + 54.f, fullW - 20.f, "Congested Roads (2.0):",
                       std::to_string(maze.countCongestedCells()).c_str(),
                       Col::TEXT_MUTED, Col::ORANGE_CONGEST, GLUT_BITMAP_HELVETICA_10);
-        y += 86.f;
 
         // 3. Configuration Actions
-        drawSectionHeader(x, y, "ACTIONS"); y += 12.f;
-        btnUndoPellet.draw(); btnClearPellets.draw(); y += 40.f;
+        drawSectionHeader(x, sideLayout.p2ActionsSecY, "ACTIONS");
+        btnUndoPellet.draw(); btnClearPellets.draw();
 
-        // 4. Workflow Navigation
-        drawSectionHeader(x, y, "WORKFLOW NAVIGATION"); y += 12.f;
-        btnPhase2Continue.draw(); y += 44.f;
-        btnPhase2Back.draw(); y += 38.f;
+        // 4. Terrain Cost Legend
+        drawTerrainLegend(x, sideLayout.p2LegendY, fullW, true);
 
-        // 5. Terrain Legend
-        drawTerrainLegend(x, (float)WIN_H - 96.f, fullW, true);
+        // 5. Workflow Navigation
+        drawSectionHeader(x, sideLayout.p2NavSecY, "WORKFLOW NAVIGATION");
+        btnPhase2Continue.draw();
+        btnPhase2Back.draw();
     }
 
     // ────────────────────────────────────────────────────────
     // PHASE 3 — SOLVE & COMPARE (BFS, DFS, A*)
     // ────────────────────────────────────────────────────────
     else if (currentPhase == AppPhase::PHASE_3_SOLVE) {
-        float y = HEADER_H + 12.f;
-        drawPhaseHeader(x, y, fullW, "PHASE 3", "SOLVE AND COMPARE",
+        drawPhaseHeader(x, sideLayout.p3HeaderY, fullW, "PHASE 3", "SOLVE AND COMPARE",
                         "Evaluate BFS, DFS, and A* routing",
                         "across single or multi-stop deliveries.");
-        y += 74.f;
 
-        // Delivery Mode & Target Status
-        drawSectionHeader(x, y, "DELIVERY TARGET"); y += 12.f;
-        drawPanel(x, y, fullW, 46.f, Col::CARD_BG, Col::BORDER, 1.0f);
+        // 1. Delivery Target
+        drawSectionHeader(x, sideLayout.p3TargetSecY, "DELIVERY TARGET");
+        drawPanel(x, sideLayout.p3TargetCardY, fullW, 40.f, Col::CARD_BG, Col::BORDER, 1.0f);
         if (deliveryMode == DeliveryMode::SINGLE_TARGET) {
             std::string tStr = "Single Target: Customer C" + std::to_string(maze.selectedCustomerId);
-            glColor3fv(Col::TEXT_WHITE);
-            drawBitmapText(x + 10.f, y + 20.f, tStr.c_str(), GLUT_BITMAP_HELVETICA_10);
-            glColor3fv(Col::TEXT_MUTED);
-            drawBitmapText(x + 10.f, y + 36.f, "Finding path from Store to selected stop", GLUT_BITMAP_HELVETICA_10);
+            drawTextTruncated(x + 10.f, sideLayout.p3TargetCardY + 16.f, tStr, fullW - 20.f, GLUT_BITMAP_HELVETICA_10, Col::TEXT_WHITE);
+            drawTextTruncated(x + 10.f, sideLayout.p3TargetCardY + 30.f, "Finding path from Store to selected stop", fullW - 20.f, GLUT_BITMAP_HELVETICA_10, Col::TEXT_MUTED);
         } else {
-            glColor3fv(Col::TEXT_WHITE);
-            drawBitmapText(x + 10.f, y + 20.f, "Multi-Stop Delivery Route:", GLUT_BITMAP_HELVETICA_10);
-            glColor3fv(Col::ACCENT);
+            drawTextTruncated(x + 10.f, sideLayout.p3TargetCardY + 16.f, "Multi-Stop Route:", fullW - 20.f, GLUT_BITMAP_HELVETICA_10, Col::TEXT_WHITE);
             std::string seq = lastMultiStopRes.stopSequenceStr.empty() ? "Store -> Customer Stops" : lastMultiStopRes.stopSequenceStr;
-            drawBitmapText(x + 10.f, y + 36.f, seq.c_str(), GLUT_BITMAP_HELVETICA_10);
+            drawTextTruncated(x + 10.f, sideLayout.p3TargetCardY + 30.f, seq, fullW - 20.f, GLUT_BITMAP_HELVETICA_10, Col::ACCENT);
         }
-        y += 56.f;
 
-        // Algorithm Selection
-        drawSectionHeader(x, y, "ALGORITHM"); y += 12.f;
-        btnSelBFS.selected   = (selSearch == SearchType::BFS);   btnSelBFS.draw();   y += 32.f;
-        btnSelDFS.selected   = (selSearch == SearchType::DFS_S); btnSelDFS.draw();   y += 32.f;
-        btnSelAStar.selected = (selSearch == SearchType::ASTAR); btnSelAStar.draw(); y += 36.f;
+        // 2. Algorithm Selection
+        drawSectionHeader(x, sideLayout.p3AlgSecY, "ALGORITHM");
+        btnSelBFS.selected   = (selSearch == SearchType::BFS);   btnSelBFS.draw();
+        btnSelDFS.selected   = (selSearch == SearchType::DFS_S); btnSelDFS.draw();
+        btnSelAStar.selected = (selSearch == SearchType::ASTAR); btnSelAStar.draw();
 
-        // Execution Controls
-        drawSectionHeader(x, y, "EXECUTION CONTROLS"); y += 12.f;
-        btnRun.draw(); btnResetSearch.draw(); y += 36.f;
+        // 3. Execution Controls
+        drawSectionHeader(x, sideLayout.p3ExecSecY, "EXECUTION CONTROLS");
+        btnRun.draw(); btnResetSearch.draw();
         btnPause.selected = paused;
-        btnStep.draw(); btnPause.draw(); y += 34.f;
-
+        btnStep.draw(); btnPause.draw();
         btnAnimateRoute.disabled = lastMultiStopRes.fullPath.empty();
-        btnAnimateRoute.draw(); btnStopAnim.draw(); y += 38.f;
+        btnAnimateRoute.draw(); btnStopAnim.draw();
 
-        // Live Route Metrics Card
-        drawSectionHeader(x, y, "RESULTS"); y += 12.f;
-        drawPanel(x, y, fullW, 134.f, Col::CARD_BG, Col::BORDER, 1.0f);
+        // 4. Results Card
+        drawSectionHeader(x, sideLayout.p3ResultsSecY, "RESULTS");
+        drawPanel(x, sideLayout.p3ResultsCardY, fullW, 122.f, Col::CARD_BG, Col::BORDER, 1.0f);
 
         if (!lastMultiStopRes.fullPath.empty()) {
-            drawMetricRow(x + 12.f, y + 20.f, fullW - 24.f, "Delivery Completed:",
+            drawMetricRow(x + 10.f, sideLayout.p3ResultsCardY + 17.f, fullW - 20.f, "Delivery Completed:",
                           lastMultiStopRes.fullyCompleted ? "YES" : "PARTIAL",
                           Col::TEXT_MUTED, lastMultiStopRes.fullyCompleted ? Col::GREEN_REWARD : Col::RED_PENALTY, GLUT_BITMAP_HELVETICA_10);
             std::string stpStr = std::to_string(lastMultiStopRes.stopsCompleted) + " / " + std::to_string(lastMultiStopRes.totalStops);
-            drawMetricRow(x + 12.f, y + 36.f, fullW - 24.f, "Stops Reached:",
+            drawMetricRow(x + 10.f, sideLayout.p3ResultsCardY + 33.f, fullW - 20.f, "Stops Reached:",
                           stpStr.c_str(), Col::TEXT_MUTED, Col::TEXT_WHITE, GLUT_BITMAP_HELVETICA_10);
-            drawMetricRow(x + 12.f, y + 52.f, fullW - 24.f, "Total Route Moves:",
+            drawMetricRow(x + 10.f, sideLayout.p3ResultsCardY + 49.f, fullW - 20.f, "Total Route Moves:",
                           std::to_string(lastMultiStopRes.totalMoves).c_str(), Col::TEXT_MUTED, Col::TEXT_WHITE, GLUT_BITMAP_HELVETICA_10);
             std::string costStr = std::to_string((int)lastMultiStopRes.totalCost) + (lastMultiStopRes.totalCost == (int)lastMultiStopRes.totalCost ? ".0" : ".5");
-            drawMetricRow(x + 12.f, y + 68.f, fullW - 24.f, "Total Weighted Cost:",
+            drawMetricRow(x + 10.f, sideLayout.p3ResultsCardY + 65.f, fullW - 20.f, "Total Weighted Cost:",
                           costStr.c_str(), Col::TEXT_MUTED, Col::PRIMARY_BLUE, GLUT_BITMAP_HELVETICA_10);
-            drawMetricRow(x + 12.f, y + 84.f, fullW - 24.f, "Total Expanded Nodes:",
+            drawMetricRow(x + 10.f, sideLayout.p3ResultsCardY + 81.f, fullW - 20.f, "Total Expanded Nodes:",
                           std::to_string(lastMultiStopRes.totalNodesExplored).c_str(), Col::TEXT_MUTED, Col::TEXT_WHITE, GLUT_BITMAP_HELVETICA_10);
 
             std::ostringstream ts; ts << std::fixed << std::setprecision(2) << lastMultiStopRes.totalTimeMs << " ms";
-            drawMetricRow(x + 12.f, y + 100.f, fullW - 24.f, "Search Time:",
+            drawMetricRow(x + 10.f, sideLayout.p3ResultsCardY + 97.f, fullW - 20.f, "Search Time:",
                           ts.str().c_str(), Col::TEXT_MUTED, Col::TEXT_WHITE, GLUT_BITMAP_HELVETICA_10);
 
             std::string rwPn = std::to_string(lastMultiStopRes.rewardsTraversed) + " / " + std::to_string(lastMultiStopRes.penaltiesTraversed);
-            drawMetricRow(x + 12.f, y + 116.f, fullW - 24.f, "Shortcuts / Penalties:",
+            drawMetricRow(x + 10.f, sideLayout.p3ResultsCardY + 113.f, fullW - 20.f, "Shortcuts / Penalties:",
                           rwPn.c_str(), Col::TEXT_MUTED, Col::GREEN_REWARD, GLUT_BITMAP_HELVETICA_10);
         } else {
             glColor3fv(Col::TEXT_MUTED);
-            drawBitmapText(x + 14.f, y + 42.f, "No search executed yet.", GLUT_BITMAP_HELVETICA_12);
-            drawBitmapText(x + 14.f, y + 66.f, "Select algorithm and click Run Search.", GLUT_BITMAP_HELVETICA_10);
+            drawBitmapText(x + 12.f, sideLayout.p3ResultsCardY + 38.f, "No search executed yet.", GLUT_BITMAP_HELVETICA_12);
+            drawBitmapText(x + 12.f, sideLayout.p3ResultsCardY + 60.f, "Select algorithm & click Run Search.", GLUT_BITMAP_HELVETICA_10);
             if (deliveryMode == DeliveryMode::MULTI_STOP) {
-                drawBitmapText(x + 14.f, y + 88.f, "Multi-stop follows user visit order.", GLUT_BITMAP_HELVETICA_10);
+                drawBitmapText(x + 12.f, sideLayout.p3ResultsCardY + 80.f, "Multi-stop follows user visit order.", GLUT_BITMAP_HELVETICA_10);
             }
         }
-        y += 148.f;
 
-        // Workflow Navigation
-        drawSectionHeader(x, y, "WORKFLOW NAVIGATION"); y += 12.f;
-        btnCompareAll.draw(); y += 44.f;
-        btnPhase3BackToConfig.draw(); btnPhase3NewMaze.draw();
+        // 5. Compare All Button (Below Results Card!)
+        btnCompareAll.draw();
+
+        // 6. Navigation (Below Compare All!)
+        btnPhase3BackToConfig.draw();
+        btnPhase3NewMaze.draw();
+    }
+
+    glPopMatrix();
+    glDisable(GL_SCISSOR_TEST);
+
+    // Subtle scrollbar thumb if content is scrollable
+    if (sideLayout.maxScrollY > 0.f) {
+        float trackH = (float)(WIN_H - HEADER_H);
+        float thumbH = std::max(20.f, trackH * (trackH / (trackH + sideLayout.maxScrollY)));
+        float thumbY = HEADER_H + (sideLayout.scrollY / sideLayout.maxScrollY) * (trackH - thumbH);
+        drawPanel((float)WIN_W - 5.f, thumbY, 3.f, thumbH, Col::ACCENT);
     }
 }
 
-// ════════════════════════════════════════════════════════════
 // ── FULL-SCREEN COMPARISON DASHBOARD ────────────────────────
 // ════════════════════════════════════════════════════════════
 static void renderComparisonDashboard() {
@@ -1737,11 +1882,25 @@ static void reshape(int w, int h) {
     glMatrixMode(GL_MODELVIEW);  glLoadIdentity();
 
     mazeLayout.update(WIN_W, WIN_H, maze.rows, maze.cols);
-    initButtonLayout();
+    updateUILayout();
     glutPostRedisplay();
 }
 
 static void mouse(int button, int state, int x, int y) {
+    // Standard GLUT Mouse Wheel (Button 3 = Wheel Up, Button 4 = Wheel Down)
+    if (button == 3 || button == 4) {
+        if (state == GLUT_DOWN && (float)x >= (float)(WIN_W - SIDEBAR_W)) {
+            if (sideLayout.maxScrollY > 0.f) {
+                if (button == 3) sideLayout.scrollY -= 30.f;
+                else             sideLayout.scrollY += 30.f;
+                if (sideLayout.scrollY < 0.f)                  sideLayout.scrollY = 0.f;
+                if (sideLayout.scrollY > sideLayout.maxScrollY) sideLayout.scrollY = sideLayout.maxScrollY;
+                glutPostRedisplay();
+            }
+        }
+        return;
+    }
+
     bool press = (state == GLUT_DOWN);
     mouseDown  = press && (button == GLUT_LEFT_BUTTON);
 
@@ -1780,9 +1939,10 @@ static void mouse(int button, int state, int x, int y) {
         return;
     }
 
-    // Right Sidebar Clicks
+    // Right Sidebar Clicks (with scroll offset applied!)
     if ((float)x >= (float)(WIN_W - SIDEBAR_W)) {
-        handleSidebarClick((float)x, (float)y);
+        float clickY = (float)y + sideLayout.scrollY;
+        handleSidebarClick((float)x, clickY);
         glutPostRedisplay();
         return;
     }
@@ -1806,7 +1966,7 @@ static void mouse(int button, int state, int x, int y) {
                     if (newId > 0) {
                         deliveryOrder.push_back(newId);
                         syncDeliveryOrder();
-                        initButtonLayout();
+                        updateUILayout();
                         statusMsg = "Added customer C" + std::to_string(newId) + " at (" + std::to_string(row) + ", " + std::to_string(col) + ").";
                         custPlacementTool = CustPlacementTool::NONE;
                     }
@@ -1832,7 +1992,7 @@ static void mouse(int button, int state, int x, int y) {
                 maze.selectedCustomerId = cid;
                 maze.goal = clickPos;
                 statusMsg = "Selected customer C" + std::to_string(cid) + ".";
-                initButtonLayout();
+                updateUILayout();
             } else if (wallEditActive) {
                 applyWallEditTool(row, col);
             }
@@ -1861,8 +2021,13 @@ static void mouseMotion(int x, int y) {
         return;
     }
 
+    float hoverY = (float)y;
+    if ((float)x >= (float)(WIN_W - SIDEBAR_W) && (float)y >= HEADER_H) {
+        hoverY += sideLayout.scrollY;
+    }
+
     for (Button* b : allButtons) {
-        b->updateHover((float)x, (float)y);
+        b->updateHover((float)x, hoverY);
     }
 
     // Drag placement for wall editing or pellet placement
@@ -1912,8 +2077,15 @@ static void keyboard(unsigned char key, int x, int y) {
         case 'l': case 'L': appState = AppState::LEGEND; break;
         case 'h': case 'H': appState = AppState::HELP; break;
         case 27: // ESC
-            if (currentPhase == AppPhase::PHASE_3_SOLVE) currentPhase = AppPhase::PHASE_2_CONFIG;
-            else if (currentPhase == AppPhase::PHASE_2_CONFIG) currentPhase = AppPhase::PHASE_1_CREATE;
+            if (currentPhase == AppPhase::PHASE_3_SOLVE) {
+                currentPhase = AppPhase::PHASE_2_CONFIG;
+                sideLayout.scrollY = 0.f;
+                updateUILayout();
+            } else if (currentPhase == AppPhase::PHASE_2_CONFIG) {
+                currentPhase = AppPhase::PHASE_1_CREATE;
+                sideLayout.scrollY = 0.f;
+                updateUILayout();
+            }
             break;
     }
     glutPostRedisplay();

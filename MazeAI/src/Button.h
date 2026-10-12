@@ -102,105 +102,115 @@ inline void drawSectionHeader(float x, float y, const char* title,
     drawBitmapText(x, y, title, GLUT_BITMAP_HELVETICA_10);
 }
 
+inline void drawTextTruncated(float x, float y, const std::string& text, float maxW,
+                              void* font = GLUT_BITMAP_HELVETICA_12,
+                              const float* col = nullptr) {
+    if (col) glColor3fv(col);
+    int fullW = glutBitmapLength(font, (const unsigned char*)text.c_str());
+    if ((float)fullW <= maxW || maxW <= 10.f) {
+        drawBitmapText(x, y, text.c_str(), font);
+        return;
+    }
+    std::string s = text;
+    int dotW = glutBitmapLength(font, (const unsigned char*)"...");
+    while (!s.empty() && (float)(glutBitmapLength(font, (const unsigned char*)s.c_str()) + dotW) > maxW) {
+        s.pop_back();
+    }
+    s += "...";
+    drawBitmapText(x, y, s.c_str(), font);
+}
+
 inline void drawMetricRow(float x, float y, float w,
                           const char* label, const char* value,
                           const float* labelCol, const float* valCol,
                           void* font = GLUT_BITMAP_HELVETICA_12) {
-    if (labelCol) glColor3fv(labelCol);
-    else glColor3f(0.60f, 0.64f, 0.72f);
-    drawBitmapText(x, y, label, font);
-
     if (valCol) glColor3fv(valCol);
     else glColor3f(0.95f, 0.96f, 0.98f);
     int valW = glutBitmapLength(font, (const unsigned char*)value);
     float valX = x + w - (float)valW;
     drawBitmapText(valX, y, value, font);
+
+    float maxLblW = std::max(20.f, valX - x - 8.f);
+    drawTextTruncated(x, y, label, maxLblW, font, labelCol);
 }
 
 inline void drawPhaseHeader(float x, float y, float w, const char* phaseNum, const char* title,
                             const char* desc1, const char* desc2 = nullptr) {
-    float h = desc2 ? 58.f : 46.f;
+    float h = desc2 ? 50.f : 44.f;
     static const float cardBg[3] = {0.11f, 0.14f, 0.20f};
     static const float border[3] = {0.20f, 0.24f, 0.33f};
     drawPanel(x, y, w, h, cardBg, border, 1.0f);
 
     std::string fullTitle = std::string(phaseNum) + " -- " + std::string(title);
     glColor3f(0.35f, 0.65f, 0.95f);
-    drawBitmapText(x + 12.f, y + 17.f, fullTitle.c_str(), GLUT_BITMAP_HELVETICA_12);
+    drawBitmapText(x + 10.f, y + 15.f, fullTitle.c_str(), GLUT_BITMAP_HELVETICA_12);
 
     glColor3f(0.60f, 0.64f, 0.72f);
-    drawBitmapText(x + 12.f, y + 33.f, desc1, GLUT_BITMAP_HELVETICA_10);
+    drawBitmapText(x + 10.f, y + 30.f, desc1, GLUT_BITMAP_HELVETICA_10);
     if (desc2) {
-        drawBitmapText(x + 12.f, y + 47.f, desc2, GLUT_BITMAP_HELVETICA_10);
+        drawBitmapText(x + 10.f, y + 43.f, desc2, GLUT_BITMAP_HELVETICA_10);
     }
 }
 
 inline void drawGridLegend(float x, float y, float w) {
-    float h = 88.f;
+    float h = 66.f;
     static const float cardBg[3] = {0.11f, 0.14f, 0.20f};
     static const float border[3] = {0.20f, 0.24f, 0.33f};
     drawPanel(x, y, w, h, cardBg, border, 1.0f);
 
-    drawSectionHeader(x + 12.f, y + 16.f, "GRID LEGEND");
+    drawSectionHeader(x + 10.f, y + 14.f, "GRID LEGEND");
 
     auto drawLegendItem = [&](float ix, float iy, const float* col, const char* iconText, const char* label) {
         glColor3fv(col);
         glBegin(GL_QUADS);
-        glVertex2f(ix, iy - 10.f);
-        glVertex2f(ix + 16.f, iy - 10.f);
-        glVertex2f(ix + 16.f, iy + 4.f);
-        glVertex2f(ix, iy + 4.f);
+        glVertex2f(ix, iy - 9.f);
+        glVertex2f(ix + 14.f, iy - 9.f);
+        glVertex2f(ix + 14.f, iy + 3.f);
+        glVertex2f(ix, iy + 3.f);
         glEnd();
         if (iconText && *iconText) {
             glColor3f(1.f, 1.f, 1.f);
-            drawBitmapText(ix + 4.f, iy + 1.f, iconText, GLUT_BITMAP_HELVETICA_10);
+            drawBitmapText(ix + 3.f, iy + 1.f, iconText, GLUT_BITMAP_HELVETICA_10);
         }
         glColor3f(0.85f, 0.88f, 0.94f);
-        drawBitmapText(ix + 24.f, iy + 1.f, label, GLUT_BITMAP_HELVETICA_10);
+        drawBitmapText(ix + 20.f, iy + 1.f, label, GLUT_BITMAP_HELVETICA_10);
     };
 
     static const float colStart[3] = {0.10f, 0.75f, 0.38f};
-    static const float colGoal[3]  = {0.20f, 0.52f, 0.95f};
-    static const float colWall[3]  = {0.20f, 0.23f, 0.30f};
-    static const float colRoad[3]  = {0.11f, 0.13f, 0.18f};
+    static const float colGoal[3]  = {0.15f, 0.45f, 0.88f};
+    static const float colWall[3]  = {0.18f, 0.21f, 0.28f};
+    static const float colRoad[3]  = {0.09f, 0.11f, 0.16f};
 
-    drawLegendItem(x + 12.f,  y + 38.f, colStart, "S", "Store / Start");
-    drawLegendItem(x + 148.f, y + 38.f, colGoal,  "G", "Customer / Goal");
-    drawLegendItem(x + 12.f,  y + 64.f, colWall,  "",  "Wall (Blocked)");
-    drawLegendItem(x + 148.f, y + 64.f, colRoad,  "",  "Open Road");
+    drawLegendItem(x + 10.f,  y + 32.f, colStart, "S", "Store / Start");
+    drawLegendItem(x + 145.f, y + 32.f, colGoal,  "C", "Customer (C1..C10)");
+    drawLegendItem(x + 10.f,  y + 52.f, colWall,  "",  "Wall (Blocked)");
+    drawLegendItem(x + 145.f, y + 52.f, colRoad,  "",  "Open Road");
 }
 
 inline void drawTerrainLegend(float x, float y, float w, bool includeCongested = true) {
-    float h = includeCongested ? 84.f : 68.f;
+    float h = 66.f;
     static const float cardBg[3] = {0.11f, 0.14f, 0.20f};
     static const float border[3] = {0.20f, 0.24f, 0.33f};
     drawPanel(x, y, w, h, cardBg, border, 1.0f);
 
-    drawSectionHeader(x + 12.f, y + 16.f, "TERRAIN COST LEGEND");
+    drawSectionHeader(x + 10.f, y + 14.f, "TERRAIN COST LEGEND");
 
     auto drawItem = [&](float ix, float iy, const char* label, const char* cost, const float* col) {
         glColor3fv(col);
         drawBitmapText(ix, iy, label, GLUT_BITMAP_HELVETICA_10);
         glColor3f(0.95f, 0.96f, 0.98f);
-        drawBitmapText(ix + 70.f, iy, cost, GLUT_BITMAP_HELVETICA_10);
+        drawBitmapText(ix + 62.f, iy, cost, GLUT_BITMAP_HELVETICA_10);
     };
 
     static const float colNorm[3]   = {0.60f, 0.64f, 0.72f};
     static const float colReward[3] = {0.12f, 0.68f, 0.38f};
     static const float colCong[3]   = {0.85f, 0.52f, 0.12f};
     static const float colPen[3]    = {0.82f, 0.22f, 0.22f};
-    static const float colWall[3]   = {0.35f, 0.40f, 0.50f};
 
-    drawItem(x + 12.f,  y + 36.f, "Normal:",  "1.0",     colNorm);
-    drawItem(x + 148.f, y + 36.f, "Reward:",  "0.5",     colReward);
-    if (includeCongested) {
-        drawItem(x + 12.f,  y + 54.f, "Congested:","2.0",    colCong);
-        drawItem(x + 148.f, y + 54.f, "Penalty:", "4.0",     colPen);
-        drawItem(x + 12.f,  y + 72.f, "Wall:",    "Blocked", colWall);
-    } else {
-        drawItem(x + 12.f,  y + 54.f, "Penalty:", "4.0",     colPen);
-        drawItem(x + 148.f, y + 54.f, "Wall:",    "Blocked", colWall);
-    }
+    drawItem(x + 10.f,  y + 32.f, "Normal:",   "1.0",     colNorm);
+    drawItem(x + 145.f, y + 32.f, "Reward:",   "0.5",     colReward);
+    drawItem(x + 10.f,  y + 50.f, "Congested:","2.0",     colCong);
+    drawItem(x + 145.f, y + 50.f, "Penalty:",  "4.0",     colPen);
 }
 
 // ── Button Widget ────────────────────────────────────────────
