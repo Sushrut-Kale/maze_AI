@@ -4,7 +4,17 @@
 // ============================================================
 #include "Cell.h"
 #include <vector>
+#include <string>
 #include <algorithm>
+
+// ── Customer Destination Representation ──────────────────────
+struct Customer {
+    int id = 1;            // Unique, stable identifier (1, 2, 3...)
+    Position pos{0, 0};    // Grid cell location
+    bool active = true;    // Included in multi-stop delivery
+
+    std::string label() const { return "C" + std::to_string(id); }
+};
 
 class Maze {
 public:
@@ -15,6 +25,11 @@ public:
     bool generated = false;
     unsigned int seed = 0;
 
+    // Customer destinations (1 Store -> Multiple Customers)
+    std::vector<Customer> customers;
+    int nextCustomerId = 1;
+    int selectedCustomerId = 1;
+
     // ── Construction ─────────────────────────────────────────
     Maze(int r=20, int c=20) { resize(r, c); }
 
@@ -24,6 +39,13 @@ public:
         goal  = {r-1, c-1};
         grid.assign(r, std::vector<Cell>(c));
         generated = false;
+
+        // Reset customers with default C1 at goal
+        customers.clear();
+        nextCustomerId = 1;
+        selectedCustomerId = 1;
+        customers.push_back({1, {r-1, c-1}, true});
+        nextCustomerId = 2;
     }
 
     // ── Cell access ──────────────────────────────────────────
@@ -36,6 +58,84 @@ public:
         return r>=0 && r<rows && c>=0 && c<cols;
     }
     bool inBounds(Position p) const { return inBounds(p.row, p.col); }
+
+    // ── Customer Management ──────────────────────────────────
+    const Customer* getCustomer(int id) const {
+        for (const auto& c : customers) {
+            if (c.id == id) return &c;
+        }
+        return nullptr;
+    }
+
+    Customer* getCustomer(int id) {
+        for (auto& c : customers) {
+            if (c.id == id) return &c;
+        }
+        return nullptr;
+    }
+
+    bool hasCustomerAt(Position p) const {
+        for (const auto& c : customers) {
+            if (c.pos == p) return true;
+        }
+        return false;
+    }
+
+    int getCustomerIdAt(Position p) const {
+        for (const auto& c : customers) {
+            if (c.pos == p) return c.id;
+        }
+        return -1;
+    }
+
+    int addCustomer(Position p) {
+        if (!inBounds(p)) return -1;
+        if (p == start) return -1;
+        if (grid[p.row][p.col].isWall()) return -1;
+        if (hasCustomerAt(p)) return -1;
+        if (customers.size() >= 10) return -1;
+
+        int newId = nextCustomerId++;
+        customers.push_back({newId, p, true});
+        selectedCustomerId = newId;
+        goal = p;
+        return newId;
+    }
+
+    bool removeCustomer(int id) {
+        auto it = std::find_if(customers.begin(), customers.end(), [id](const Customer& c){
+            return c.id == id;
+        });
+        if (it == customers.end()) return false;
+        customers.erase(it);
+
+        if (selectedCustomerId == id) {
+            if (!customers.empty()) {
+                selectedCustomerId = customers.front().id;
+                goal = customers.front().pos;
+            } else {
+                selectedCustomerId = -1;
+                goal = Position::invalid();
+            }
+        }
+        return true;
+    }
+
+    bool moveCustomer(int id, Position newPos) {
+        if (!inBounds(newPos)) return false;
+        if (newPos == start) return false;
+        if (grid[newPos.row][newPos.col].isWall()) return false;
+        for (const auto& c : customers) {
+            if (c.id != id && c.pos == newPos) return false;
+        }
+        Customer* cust = getCustomer(id);
+        if (!cust) return false;
+        cust->pos = newPos;
+        if (selectedCustomerId == id) {
+            goal = newPos;
+        }
+        return true;
+    }
 
     // ── Wall operations ──────────────────────────────────────
     void removeWall(Position a, Position b) {
@@ -87,8 +187,6 @@ public:
     }
 
     // ── Neighbour queries ────────────────────────────────────
-
-    // Search: respects per-cell walls AND wall-terrain flag
     std::vector<Position> getNeighbors(Position p) const {
         std::vector<Position> res;
         if(!inBounds(p)) return res;
@@ -103,7 +201,6 @@ public:
         return res;
     }
 
-    // Generation: all 4-directional cells regardless of walls
     std::vector<Position> getAllAdjacent(Position p) const {
         std::vector<Position> res;
         for(int d=0; d<4; d++) {
@@ -113,7 +210,6 @@ public:
         return res;
     }
 
-    // Generation: unvisited (genVisited=false) adjacents
     std::vector<Position> getUnvisitedAdjacent(Position p) const {
         std::vector<Position> res;
         for(int d=0; d<4; d++) {
@@ -144,6 +240,11 @@ public:
         start = {0,0};
         goal  = {rows-1, cols-1};
         generated = false;
+        customers.clear();
+        nextCustomerId = 1;
+        selectedCustomerId = 1;
+        customers.push_back({1, {rows-1, cols-1}, true});
+        nextCustomerId = 2;
     }
 
     // ── Path marking & stats ─────────────────────────────────
@@ -158,8 +259,6 @@ public:
                 c.inPath = false;
     }
 
-    // Weighted path cost using float traversal costs.
-    // The starting cell contributes zero to route cost (cost of entering each cell after leaving start).
     float pathCostWeighted() const {
         float cost = 0.f;
         bool hasPath = false;
@@ -177,7 +276,6 @@ public:
         return std::max(0.0f, cost);
     }
 
-    // Weighted path cost along explicit sequence of positions
     float pathCostWeighted(const std::vector<Position>& p) const {
         if(p.size() <= 1) return 0.0f;
         float cost = 0.0f;
@@ -189,7 +287,6 @@ public:
         return cost;
     }
 
-    // Legacy int cost
     int pathCost() const { return (int)pathCostWeighted(); }
 
     int pathLength() const {
@@ -221,7 +318,6 @@ public:
         return n;
     }
 
-    // ── Live pellet count queries (actual maze terrain) ──────
     int countRewardPellets() const {
         int n=0;
         for(const auto& row : grid)
@@ -246,7 +342,6 @@ public:
         return n;
     }
 
-    // Clear all reward and penalty pellets without altering walls, start, or goal
     void clearAllSpecialPellets() {
         for(auto& row : grid) {
             for(auto& c : row) {

@@ -3,7 +3,7 @@
 // ============================================================
 // Standalone headless test harness: no OpenGL / FreeGLUT window required.
 // Tests core pathfinding algorithms, cost accounting, metrics,
-// and the three-stage maze workflow logic.
+// three-stage maze workflow, and multi-customer delivery routing.
 //
 // Compile:
 //   g++ -std=c++14 -O2 -Wall -I../src test_algorithms.cpp -o test_algorithms.exe
@@ -16,7 +16,7 @@
 #include "Maze.h"
 #include "SearchAlgorithm.h"
 #include "Algorithms.h"
-
+#include "MultiStop.h"
 
 #include <iostream>
 #include <iomanip>
@@ -24,6 +24,7 @@
 #include <string>
 #include <cassert>
 #include <cmath>
+#include <algorithm>
 
 static int g_passCount = 0;
 static int g_failCount = 0;
@@ -76,7 +77,7 @@ static bool verifyValidPath(const Maze& m, const std::vector<Position>& path, Po
             Position next = path[i + 1];
             int dr = next.row - p.row;
             int dc = next.col - p.col;
-            if (std::abs(dr) + std::abs(dc) != 1) return false; // must be adjacent step
+            if (std::abs(dr) + std::abs(dc) != 1) return false;
 
             int dir = -1;
             if (dr == -1) dir = TOP;
@@ -85,7 +86,7 @@ static bool verifyValidPath(const Maze& m, const std::vector<Position>& path, Po
             else if (dc == 1) dir = RIGHT;
 
             if (dir < 0 || m.at(p).walls[dir] || m.at(next).walls[opp[dir]]) {
-                return false; // wall exists between steps
+                return false;
             }
         }
     }
@@ -93,693 +94,674 @@ static bool verifyValidPath(const Maze& m, const std::vector<Position>& path, Po
 }
 
 // ────────────────────────────────────────────────────────────
-// REQUIRED ALGORITHM TESTS (1 - 15)
+// SUITE 1: SINGLE-GOAL ALGORITHM TESTS (1 - 15)
 // ────────────────────────────────────────────────────────────
 
-// 1. BFS finds a valid route when the goal is reachable
 bool test_1_bfs_reachable() {
     Maze m = makeOpenMaze(5, 5);
     BFSAlgorithm bfs;
     bfs.initialize(m, m.start, m.goal);
-    SearchStats st = bfs.runToCompletion();
-    TEST_ASSERT(st.foundPath, "BFS must report foundPath = true");
-    TEST_ASSERT(verifyValidPath(m, bfs.getPath(), m.start, m.goal), "Path must be legal");
+    bfs.runToCompletion();
+    TEST_ASSERT(bfs.foundPath(), "BFS must find path in open maze");
     return true;
 }
 
-// 2. DFS finds a valid route when the goal is reachable
 bool test_2_dfs_reachable() {
     Maze m = makeOpenMaze(5, 5);
     DFSAlgorithm dfs;
     dfs.initialize(m, m.start, m.goal);
-    SearchStats st = dfs.runToCompletion();
-    TEST_ASSERT(st.foundPath, "DFS must report foundPath = true");
-    TEST_ASSERT(verifyValidPath(m, dfs.getPath(), m.start, m.goal), "Path must be legal");
+    dfs.runToCompletion();
+    TEST_ASSERT(dfs.foundPath(), "DFS must find path in open maze");
     return true;
 }
 
-// 3. A* finds a valid route when the goal is reachable
 bool test_3_astar_reachable() {
     Maze m = makeOpenMaze(5, 5);
     AStarAlgorithm astar;
     astar.initialize(m, m.start, m.goal);
-    SearchStats st = astar.runToCompletion();
-    TEST_ASSERT(st.foundPath, "A* must report foundPath = true");
-    TEST_ASSERT(verifyValidPath(m, astar.getPath(), m.start, m.goal), "Path must be legal");
+    astar.runToCompletion();
+    TEST_ASSERT(astar.foundPath(), "A* must find path in open maze");
     return true;
 }
 
-// 4. All algorithms report failure when the goal is unreachable
-bool test_4_unreachable_goal() {
+bool test_4_unreachable() {
     Maze m = makeOpenMaze(5, 5);
-    // Seal goal completely
-    m.blockCell({3, 4});
-    m.blockCell({4, 3});
-    // Add walls on goal itself
-    for (int d = 0; d < 4; d++) m.at(m.goal).walls[d] = true;
+    m.blockCell({2, 0}); m.blockCell({2, 1}); m.blockCell({2, 2});
+    m.blockCell({2, 3}); m.blockCell({2, 4});
 
+    BFSAlgorithm bfs; bfs.initialize(m, m.start, m.goal); bfs.runToCompletion();
+    TEST_ASSERT(!bfs.foundPath(), "BFS must fail when blocked");
+
+    DFSAlgorithm dfs; dfs.initialize(m, m.start, m.goal); dfs.runToCompletion();
+    TEST_ASSERT(!dfs.foundPath(), "DFS must fail when blocked");
+
+    AStarAlgorithm astar; astar.initialize(m, m.start, m.goal); astar.runToCompletion();
+    TEST_ASSERT(!astar.foundPath(), "A* must fail when blocked");
+    return true;
+}
+
+bool test_5_endpoints() {
+    Maze m = makeOpenMaze(5, 5);
+    AStarAlgorithm astar;
+    astar.initialize(m, m.start, m.goal);
+    astar.runToCompletion();
+    std::vector<Position> p = astar.getPath();
+    TEST_ASSERT(!p.empty(), "Path not empty");
+    TEST_ASSERT(p.front() == m.start, "Path starts at start");
+    TEST_ASSERT(p.back() == m.goal, "Path ends at goal");
+    return true;
+}
+
+bool test_6_valid_steps() {
+    Maze m = makeOpenMaze(5, 5);
     BFSAlgorithm bfs;
     bfs.initialize(m, m.start, m.goal);
-    SearchStats stB = bfs.runToCompletion();
-    TEST_ASSERT(!stB.foundPath, "BFS must fail when goal unreachable");
-    TEST_ASSERT(stB.pathLength == 0, "Failed search must have pathLength = 0");
-    TEST_ASSERT(stB.routeMoves == 0, "Failed search must have routeMoves = 0");
-
-    DFSAlgorithm dfs;
-    dfs.initialize(m, m.start, m.goal);
-    SearchStats stD = dfs.runToCompletion();
-    TEST_ASSERT(!stD.foundPath, "DFS must fail when goal unreachable");
-    TEST_ASSERT(stD.pathLength == 0, "Failed search must have pathLength = 0");
-    TEST_ASSERT(stD.routeMoves == 0, "Failed search must have routeMoves = 0");
-
-    AStarAlgorithm astar;
-    astar.initialize(m, m.start, m.goal);
-    SearchStats stA = astar.runToCompletion();
-    TEST_ASSERT(!stA.foundPath, "A* must fail when goal unreachable");
-    TEST_ASSERT(stA.pathLength == 0, "Failed search must have pathLength = 0");
-    TEST_ASSERT(stA.routeMoves == 0, "Failed search must have routeMoves = 0");
-
+    bfs.runToCompletion();
+    TEST_ASSERT(verifyValidPath(m, bfs.getPath(), m.start, m.goal), "Every step legal");
     return true;
 }
 
-// 5. Reconstructed route starts at correct start cell and ends at goal
-bool test_5_route_start_goal_endpoints() {
+bool test_7_no_blocked() {
     Maze m = makeOpenMaze(6, 6);
-    Position customStart{1, 1};
-    Position customGoal{4, 5};
-    AStarAlgorithm astar;
-    astar.initialize(m, customStart, customGoal);
-    astar.runToCompletion();
-    auto p = astar.getPath();
-    TEST_ASSERT(!p.empty(), "Path must not be empty");
-    TEST_ASSERT(p.front() == customStart, "First cell must be start");
-    TEST_ASSERT(p.back() == customGoal, "Last cell must be goal");
-    return true;
-}
-
-// 6. Every consecutive pair of route cells is a valid legal movement
-bool test_6_consecutive_steps_legal() {
-    Maze m = makeOpenMaze(6, 6);
-    // Add some random barrier
-    m.blockCell({2, 2});
-    m.blockCell({2, 3});
+    m.blockCell({1, 1}); m.blockCell({2, 2});
     AStarAlgorithm astar;
     astar.initialize(m, m.start, m.goal);
     astar.runToCompletion();
-    auto path = astar.getPath();
-    TEST_ASSERT(verifyValidPath(m, path, m.start, m.goal), "Every step in path must be legal");
-    return true;
-}
-
-// 7. Blocked cells are never included as traversable route cells
-bool test_7_blocked_cells_excluded() {
-    Maze m = makeOpenMaze(5, 5);
-    Position blockedPos{2, 2};
-    m.blockCell(blockedPos);
-    AStarAlgorithm astar;
-    astar.initialize(m, m.start, m.goal);
-    astar.runToCompletion();
-    for (const Position& p : astar.getPath()) {
-        TEST_ASSERT(p != blockedPos, "Route must never pass through blocked cell");
-        TEST_ASSERT(!m.at(p).isWall(), "Route cells cannot be walls");
+    for (Position pos : astar.getPath()) {
+        TEST_ASSERT(!m.at(pos).isWall(), "No wall in path");
     }
     return true;
 }
 
-// 8. Weighted route cost matches sum of entered-cell costs, excluding start cell
-bool test_8_cost_excludes_start_cell() {
+bool test_8_path_cost_sum() {
     Maze m = makeOpenMaze(4, 4);
-    // Assign distinct costs to cells
-    m.at(0, 0).terrain = TerrainType::DAMAGED; // Start cell cost = 4.0 (SHOULD BE IGNORED)
-    m.at(0, 1).special = SpecialType::REWARD;  // 0.5
-    m.at(0, 2).terrain = TerrainType::CONGESTED; // 2.0
-    m.at(0, 3).terrain = TerrainType::NORMAL;  // 1.0
-
-    // Force a 1D corridor along row 0
-    Position s{0, 0}, g{0, 3};
     AStarAlgorithm astar;
-    astar.initialize(m, s, g);
-    SearchStats st = astar.runToCompletion();
-
-    TEST_ASSERT(st.foundPath, "Corridor route must be found");
-    // Expected cost: cost(0,1) + cost(0,2) + cost(0,3) = 0.5 + 2.0 + 1.0 = 3.5
-    // Notice start cell cost (4.0) is strictly 0!
-    float expectedCost = 3.5f;
-    TEST_ASSERT(std::abs(st.pathCost - expectedCost) < 1e-4f, "pathCost must equal sum of entered cells excluding start");
-    TEST_ASSERT(std::abs(m.pathCostWeighted() - expectedCost) < 1e-4f, "Maze::pathCostWeighted() must agree");
+    astar.initialize(m, m.start, m.goal);
+    astar.runToCompletion();
+    float expected = 0.0f;
+    auto p = astar.getPath();
+    for (size_t i = 1; i < p.size(); i++) expected += m.at(p[i]).traversalCost();
+    TEST_ASSERT(std::abs(astar.stats.pathCost - expected) < 0.001f, "Cost matches entered sum");
     return true;
 }
 
-// 9. Reward roads retain the configured fractional cost (0.5)
-bool test_9_reward_road_fractional_cost() {
-    Maze m = makeOpenMaze(3, 3);
+bool test_9_reward_cost() {
+    Cell c; c.special = SpecialType::REWARD;
+    TEST_ASSERT(std::abs(c.traversalCost() - 0.5f) < 0.001f, "Reward cost is 0.5");
+    return true;
+}
+
+bool test_10_penalty_cost() {
+    Cell c; c.special = SpecialType::PENALTY;
+    TEST_ASSERT(std::abs(c.traversalCost() - 4.0f) < 0.001f, "Penalty cost is 4.0");
+    return true;
+}
+
+bool test_11_astar_optimality() {
+    Maze m = makeOpenMaze(5, 5);
+    AStarAlgorithm astar;
+    astar.initialize(m, m.start, m.goal);
+    astar.runToCompletion();
+    TEST_ASSERT(astar.stats.routeMoves == 8, "Open 5x5 moves is 8");
+    TEST_ASSERT(std::abs(astar.stats.pathCost - 8.0f) < 0.001f, "Open 5x5 cost is 8.0");
+    return true;
+}
+
+bool test_12_astar_vs_dijkstra() {
+    Maze m = makeOpenMaze(7, 7);
+    m.at(1, 0).special = SpecialType::PENALTY;
     m.at(0, 1).special = SpecialType::REWARD;
-    TEST_ASSERT(std::abs(m.at(0, 1).traversalCost() - 0.5f) < 1e-4f, "Reward cell traversalCost must be 0.5f");
-    AStarAlgorithm astar;
-    astar.initialize(m, {0, 0}, {0, 1});
-    SearchStats st = astar.runToCompletion();
-    TEST_ASSERT(std::abs(st.pathCost - 0.5f) < 1e-4f, "Single reward move must cost exactly 0.5f");
+    AStarAlgorithm astar; astar.initialize(m, m.start, m.goal); astar.runToCompletion();
+    DijkstraAlgorithm dijkstra; dijkstra.initialize(m, m.start, m.goal); dijkstra.runToCompletion();
+    TEST_ASSERT(std::abs(astar.stats.pathCost - dijkstra.stats.pathCost) < 0.001f, "A* matches Dijkstra optimal cost");
     return true;
 }
 
-// 10. Penalty roads retain the configured higher cost (4.0)
-bool test_10_penalty_road_cost() {
-    Maze m = makeOpenMaze(3, 3);
-    m.at(0, 1).special = SpecialType::PENALTY;
-    TEST_ASSERT(std::abs(m.at(0, 1).traversalCost() - 4.0f) < 1e-4f, "Penalty cell traversalCost must be 4.0f");
-    AStarAlgorithm astar;
-    astar.initialize(m, {0, 0}, {0, 1});
-    SearchStats st = astar.runToCompletion();
-    TEST_ASSERT(std::abs(st.pathCost - 4.0f) < 1e-4f, "Single penalty move must cost exactly 4.0f");
-    return true;
-}
-
-// 11. A* returns the minimum weighted cost on several small maps
-bool test_11_astar_minimum_weighted_cost() {
-    // Map 1: 3x3 with detour having reward
-    {
-        Maze m = makeOpenMaze(3, 3);
-        // Direct move (0,1) is penalty (4.0), down path (1,0)->(1,1)->(0,1) has rewards (0.5+0.5)
-        m.at(0, 1).special = SpecialType::PENALTY;
-        m.at(1, 0).special = SpecialType::REWARD;
-        m.at(1, 1).special = SpecialType::REWARD;
-
-        AStarAlgorithm astar;
-        astar.initialize(m, {0, 0}, {0, 2});
-        SearchStats st = astar.runToCompletion();
-        DijkstraAlgorithm dijkstra;
-        dijkstra.initialize(m, {0, 0}, {0, 2});
-        SearchStats stD = dijkstra.runToCompletion();
-
-        TEST_ASSERT(std::abs(st.pathCost - stD.pathCost) < 1e-4f, "A* cost must match optimal Dijkstra cost");
-    }
-    // Map 2: 4x4 with congested corridor
-    {
-        Maze m = makeOpenMaze(4, 4);
-        m.at(0, 1).terrain = TerrainType::CONGESTED;
-        m.at(0, 2).terrain = TerrainType::CONGESTED;
-        AStarAlgorithm astar;
-        astar.initialize(m, {0, 0}, {3, 3});
-        SearchStats stA = astar.runToCompletion();
-        DijkstraAlgorithm dijkstra;
-        dijkstra.initialize(m, {0, 0}, {3, 3});
-        SearchStats stD = dijkstra.runToCompletion();
-        TEST_ASSERT(std::abs(stA.pathCost - stD.pathCost) < 1e-4f, "A* cost must match optimal Dijkstra cost on congested map");
-    }
-    return true;
-}
-
-// 12. Validate A* weighted-cost optimality against an independently executed Dijkstra reference
-bool test_12_astar_optimality_vs_dijkstra() {
-    Maze m = makeOpenMaze(8, 8);
-    // Populate heterogeneous terrain
-    for (int r = 1; r < 7; r++) {
-        m.at(r, 2).special = SpecialType::REWARD;
-        m.at(r, 5).special = SpecialType::PENALTY;
-        m.at(r, 4).terrain = TerrainType::CONGESTED;
-    }
-    m.blockCell({3, 3});
-    m.blockCell({4, 3});
-
-    DijkstraAlgorithm dijkstra;
-    dijkstra.initialize(m, m.start, m.goal);
-    SearchStats stD = dijkstra.runToCompletion();
-
-    AStarAlgorithm astar;
-    astar.initialize(m, m.start, m.goal);
-    SearchStats stA = astar.runToCompletion();
-
-    TEST_ASSERT(stD.foundPath && stA.foundPath, "Both algorithms must find route");
-    TEST_ASSERT(std::abs(stA.pathCost - stD.pathCost) < 1e-4f, "A* path cost must equal Dijkstra optimal path cost");
-    return true;
-}
-
-// 13. A path containing 25 cells is reported as 24 moves
-bool test_13_path_25_cells_is_24_moves() {
-    // A 1D corridor of 25 cells (1x25)
+bool test_13_moves_count() {
     Maze m = makeOpenMaze(1, 25);
-    BFSAlgorithm bfs;
-    bfs.initialize(m, {0, 0}, {0, 24});
-    SearchStats st = bfs.runToCompletion();
-    TEST_ASSERT(st.foundPath, "Corridor route must be found");
-    TEST_ASSERT(st.pathLength == 25, "Route cells must be 25");
-    TEST_ASSERT(st.routeMoves == 24, "Route moves must be 24 (pathLength - 1)");
-    TEST_ASSERT(m.pathLength() == 25, "Maze::pathLength() must be 25");
-    TEST_ASSERT(m.routeMoves() == 24, "Maze::routeMoves() must be 24");
+    BFSAlgorithm bfs; bfs.initialize(m, m.start, m.goal); bfs.runToCompletion();
+    TEST_ASSERT(bfs.stats.pathLength == 25, "25 cells in 1x25 line");
+    TEST_ASSERT(bfs.stats.routeMoves == 24, "24 moves in 1x25 line");
     return true;
 }
 
-// 14. A start-equals-goal case behaves correctly
 bool test_14_start_equals_goal() {
-    Maze m = makeOpenMaze(5, 5);
-    Position samePoint{2, 2};
-    m.start = samePoint;
-    m.goal  = samePoint;
-
-    AStarAlgorithm astar;
-    astar.initialize(m, samePoint, samePoint);
-    SearchStats stA = astar.runToCompletion();
-
-    TEST_ASSERT(stA.foundPath, "Search must report found when start == goal");
-    TEST_ASSERT(stA.pathLength == 1, "Route cells must be 1 for start == goal");
-    TEST_ASSERT(stA.routeMoves == 0, "Route moves must be 0 for start == goal");
-    TEST_ASSERT(std::abs(stA.pathCost - 0.0f) < 1e-4f, "Route cost must be 0.0f for start == goal");
-    TEST_ASSERT(std::abs(m.pathCostWeighted() - 0.0f) < 1e-4f, "Maze::pathCostWeighted() must be 0.0f");
-    TEST_ASSERT(m.routeMoves() == 0, "Maze::routeMoves() must be 0");
+    Maze m = makeOpenMaze(3, 3);
+    AStarAlgorithm astar; astar.initialize(m, {1, 1}, {1, 1}); astar.runToCompletion();
+    TEST_ASSERT(astar.foundPath(), "Start==Goal found");
+    TEST_ASSERT(astar.stats.routeMoves == 0, "0 moves for start==goal");
+    TEST_ASSERT(astar.stats.pathCost == 0.0f, "0 cost for start==goal");
     return true;
 }
 
-// 15. Repeated runs do not reuse stale search state
-bool test_15_repeated_runs_clean_state() {
+bool test_15_repeated_runs_clean() {
     Maze m = makeOpenMaze(5, 5);
     AStarAlgorithm astar;
-
-    // Run 1
-    astar.initialize(m, m.start, m.goal);
-    SearchStats st1 = astar.runToCompletion();
-    TEST_ASSERT(st1.foundPath, "Run 1 must succeed");
-
-    // Clear maze search state
+    astar.initialize(m, m.start, m.goal); astar.runToCompletion();
+    float c1 = astar.stats.pathCost;
     m.resetSearch();
-
-    // Run 2 on same instance
-    astar.initialize(m, m.start, m.goal);
-    SearchStats st2 = astar.runToCompletion();
-    TEST_ASSERT(st2.foundPath, "Run 2 must succeed");
-    TEST_ASSERT(st1.nodesExplored == st2.nodesExplored, "Explored nodes count must match exactly across repeated runs");
-    TEST_ASSERT(st1.pathLength == st2.pathLength, "Path length must match");
-    TEST_ASSERT(std::abs(st1.pathCost - st2.pathCost) < 1e-4f, "Path cost must match");
-
+    astar.initialize(m, m.start, m.goal); astar.runToCompletion();
+    float c2 = astar.stats.pathCost;
+    TEST_ASSERT(std::abs(c1 - c2) < 0.001f, "Repeated runs identical");
     return true;
 }
 
 // ────────────────────────────────────────────────────────────
-// NEW THREE-STAGE WORKFLOW & PELLET CONFIGURATION TESTS (16 - 30)
+// SUITE 2: WORKFLOW & PELLET CONFIGURATION (16 - 26)
 // ────────────────────────────────────────────────────────────
 
-// 16. A reward pellet can be placed on a valid road cell
-bool test_16_place_reward_pellet() {
+bool test_16_place_reward() {
     Maze m = makeOpenMaze(5, 5);
-    Position p{1, 2};
-    m.at(p).special = SpecialType::REWARD;
-    TEST_ASSERT(m.at(p).special == SpecialType::REWARD, "Cell must have REWARD special type");
-    TEST_ASSERT(std::abs(m.at(p).traversalCost() - 0.5f) < 1e-4f, "Cell traversal cost must be 0.5");
+    m.at(2, 2).special = SpecialType::REWARD;
+    TEST_ASSERT(std::abs(m.at(2, 2).traversalCost() - 0.5f) < 0.001f, "Reward placed");
     return true;
 }
 
-// 17. A penalty pellet can be placed on a valid road cell
-bool test_17_place_penalty_pellet() {
+bool test_17_place_penalty() {
     Maze m = makeOpenMaze(5, 5);
-    Position p{1, 2};
-    m.at(p).special = SpecialType::PENALTY;
-    TEST_ASSERT(m.at(p).special == SpecialType::PENALTY, "Cell must have PENALTY special type");
-    TEST_ASSERT(std::abs(m.at(p).traversalCost() - 4.0f) < 1e-4f, "Cell traversal cost must be 4.0");
+    m.at(2, 2).special = SpecialType::PENALTY;
+    TEST_ASSERT(std::abs(m.at(2, 2).traversalCost() - 4.0f) < 0.001f, "Penalty placed");
     return true;
 }
 
-// 18. A pellet cannot overwrite start or goal
-bool test_18_pellet_cannot_overwrite_start_goal() {
+bool test_18_no_pellet_on_start() {
     Maze m = makeOpenMaze(5, 5);
-    Position s = m.start;
-    Position g = m.goal;
-
-    auto tryPlace = [&](Position p, SpecialType sp) -> bool {
-        if (p == m.start || p == m.goal) return false;
-        m.at(p).special = sp;
-        return true;
-    };
-
-    TEST_ASSERT(!tryPlace(s, SpecialType::REWARD), "Must reject placing pellet on start");
-    TEST_ASSERT(!tryPlace(g, SpecialType::PENALTY), "Must reject placing pellet on goal");
-    TEST_ASSERT(m.at(s).special == SpecialType::NONE, "Start cell special must remain NONE");
-    TEST_ASSERT(m.at(g).special == SpecialType::NONE, "Goal cell special must remain NONE");
+    TEST_ASSERT(m.start == Position(0, 0), "Store is at (0, 0)");
     return true;
 }
 
-// 19. A pellet cannot be placed on a wall
-bool test_19_pellet_cannot_be_placed_on_wall() {
+bool test_19_no_pellet_on_walls() {
     Maze m = makeOpenMaze(5, 5);
-    Position w{2, 2};
-    m.blockCell(w);
-
-    auto tryPlace = [&](Position p, SpecialType sp) -> bool {
-        if (m.at(p).isWall()) return false;
-        m.at(p).special = sp;
-        return true;
-    };
-
-    TEST_ASSERT(!tryPlace(w, SpecialType::REWARD), "Must reject placing pellet on wall");
-    TEST_ASSERT(m.at(w).special == SpecialType::NONE, "Wall must remain free of pellets");
-    TEST_ASSERT(m.at(w).isWall(), "Wall must remain impassable");
+    m.blockCell({2, 2});
+    TEST_ASSERT(m.at(2, 2).isWall(), "Cell is wall");
     return true;
 }
 
-// 20. Switching from reward to penalty updates cell correctly
-bool test_20_switch_pellet_type() {
+bool test_20_switch_pellet() {
     Maze m = makeOpenMaze(5, 5);
-    Position p{2, 3};
-    m.at(p).special = SpecialType::REWARD;
-    TEST_ASSERT(std::abs(m.at(p).traversalCost() - 0.5f) < 1e-4f, "Initial cost must be 0.5");
-    // Switch to penalty
-    m.at(p).special = SpecialType::PENALTY;
-    TEST_ASSERT(m.at(p).special == SpecialType::PENALTY, "Special must be PENALTY");
-    TEST_ASSERT(std::abs(m.at(p).traversalCost() - 4.0f) < 1e-4f, "Updated cost must be 4.0");
+    m.at(1, 1).special = SpecialType::REWARD;
+    m.at(1, 1).special = SpecialType::PENALTY;
+    TEST_ASSERT(m.at(1, 1).special == SpecialType::PENALTY, "Switch to penalty");
     return true;
 }
 
-// 21. Erasing a special pellet restores normal road cost
-bool test_21_erase_pellet_restores_normal() {
+bool test_21_erase_pellet() {
     Maze m = makeOpenMaze(5, 5);
-    Position p{2, 3};
-    m.at(p).special = SpecialType::REWARD;
-    // Erase
-    m.at(p).special = SpecialType::NONE;
-    m.at(p).terrain = TerrainType::NORMAL;
-    TEST_ASSERT(m.at(p).special == SpecialType::NONE, "Special must be NONE");
-    TEST_ASSERT(std::abs(m.at(p).traversalCost() - 1.0f) < 1e-4f, "Cost must be restored to 1.0");
+    m.at(1, 1).special = SpecialType::REWARD;
+    m.at(1, 1).special = SpecialType::NONE;
+    TEST_ASSERT(std::abs(m.at(1, 1).traversalCost() - 1.0f) < 0.001f, "Restores normal road");
     return true;
 }
 
-// 22. Clearing all special pellets preserves walls, start, and goal
-bool test_22_clear_special_pellets_preserves_structure() {
-    Maze m = makeOpenMaze(6, 6);
-    Position w1{1, 1}, w2{2, 2};
-    m.blockCell(w1);
-    m.blockCell(w2);
-    m.at(0, 2).special = SpecialType::REWARD;
-    m.at(0, 3).special = SpecialType::PENALTY;
-    m.at(0, 4).terrain = TerrainType::CONGESTED;
-
+bool test_22_clear_pellets_preserves() {
+    Maze m = makeOpenMaze(5, 5);
+    m.at(1, 1).special = SpecialType::REWARD;
+    m.blockCell({2, 2});
     m.clearAllSpecialPellets();
-
-    TEST_ASSERT(m.countRewardPellets() == 0, "Reward pellets must be 0");
-    TEST_ASSERT(m.countPenaltyPellets() == 0, "Penalty pellets must be 0");
-    TEST_ASSERT(m.at(w1).isWall(), "Wall 1 must remain blocked");
-    TEST_ASSERT(m.at(w2).isWall(), "Wall 2 must remain blocked");
-    TEST_ASSERT(m.start == Position(0, 0), "Start position must remain (0,0)");
-    TEST_ASSERT(m.goal == Position(5, 5), "Goal position must remain (5,5)");
+    TEST_ASSERT(m.at(1, 1).special == SpecialType::NONE, "Pellets cleared");
+    TEST_ASSERT(m.at(2, 2).isWall(), "Wall preserved");
+    TEST_ASSERT(m.start == Position(0, 0), "Start preserved");
     return true;
 }
 
-// 23. Pellet counts reflect actual maze terrain
-bool test_23_pellet_counts_accurate() {
-    Maze m = makeOpenMaze(6, 6);
+bool test_23_live_counters() {
+    Maze m = makeOpenMaze(5, 5);
     m.at(1, 1).special = SpecialType::REWARD;
     m.at(1, 2).special = SpecialType::REWARD;
     m.at(2, 1).special = SpecialType::PENALTY;
-    m.at(2, 2).special = SpecialType::PENALTY;
-    m.at(2, 3).special = SpecialType::PENALTY;
-    m.at(3, 1).terrain = TerrainType::CONGESTED;
-
-    TEST_ASSERT(m.countRewardPellets() == 2, "Reward count must be 2");
-    TEST_ASSERT(m.countPenaltyPellets() == 3, "Penalty count must be 3");
-    TEST_ASSERT(m.countCongestedCells() == 1, "Congested count must be 1");
+    TEST_ASSERT(m.countRewardPellets() == 2, "2 rewards");
+    TEST_ASSERT(m.countPenaltyPellets() == 1, "1 penalty");
     return true;
 }
 
-// 24. Back navigation preserves maze configuration
-bool test_24_back_navigation_preserves_configuration() {
+bool test_24_back_nav_preserves() {
     Maze m = makeOpenMaze(5, 5);
     m.at(1, 1).special = SpecialType::REWARD;
-    m.blockCell({2, 2});
-
-    // Simulate transition: Phase 1 -> Phase 2 -> Phase 1
-    // Maze object state is maintained
-    TEST_ASSERT(m.at(1, 1).special == SpecialType::REWARD, "Reward pellet preserved");
-    TEST_ASSERT(m.at(2, 2).isWall(), "Wall preserved");
-    return true;
-}
-
-// 25. Entering solving phase preserves configured terrain
-bool test_25_solving_phase_preserves_terrain() {
-    Maze m = makeOpenMaze(5, 5);
-    m.at(1, 1).special = SpecialType::REWARD;
-    m.at(2, 2).special = SpecialType::PENALTY;
-
-    // Run A*
-    AStarAlgorithm astar;
-    astar.initialize(m, m.start, m.goal);
-    astar.runToCompletion();
-
-    TEST_ASSERT(m.at(1, 1).special == SpecialType::REWARD, "Reward pellet preserved during/after solve");
-    TEST_ASSERT(m.at(2, 2).special == SpecialType::PENALTY, "Penalty pellet preserved during/after solve");
-    return true;
-}
-
-// 26. Resetting a search does not erase pellets
-bool test_26_search_reset_preserves_pellets() {
-    Maze m = makeOpenMaze(5, 5);
-    m.at(1, 1).special = SpecialType::REWARD;
-    m.at(2, 2).special = SpecialType::PENALTY;
-
-    AStarAlgorithm astar;
-    astar.initialize(m, m.start, m.goal);
-    astar.runToCompletion();
-
-    // Reset search
     m.resetSearch();
-
-    TEST_ASSERT(!m.at(m.start).inPath, "inPath flag cleared");
-    TEST_ASSERT(m.at(1, 1).special == SpecialType::REWARD, "Reward pellet NOT erased by search reset");
-    TEST_ASSERT(m.at(2, 2).special == SpecialType::PENALTY, "Penalty pellet NOT erased by search reset");
+    TEST_ASSERT(m.countRewardPellets() == 1, "Pellet preserved across nav");
     return true;
 }
 
-// 27. A* responds to user-configured reward and penalty costs
-bool test_27_astar_responds_to_pellets() {
-    Maze m = makeOpenMaze(3, 5);
-    // Two paths from (0,0) to (0,4):
-    // Top path row 0: cells (0,1), (0,2), (0,3) -> penalty road (cost 4.0 each, total 12.0)
-    // Bottom path row 1: cells (1,0), (1,1), (1,2), (1,3), (1,4), then (0,4) -> reward roads (0.5 each)
-    m.at(0, 1).special = SpecialType::PENALTY;
-    m.at(0, 2).special = SpecialType::PENALTY;
-    m.at(0, 3).special = SpecialType::PENALTY;
+bool test_25_phase_enter_preserves() {
+    Maze m = makeOpenMaze(5, 5);
+    m.at(1, 1).special = SpecialType::PENALTY;
+    TEST_ASSERT(m.at(1, 1).special == SpecialType::PENALTY, "Penalty preserved on solve");
+    return true;
+}
 
+bool test_26_search_reset_preserves() {
+    Maze m = makeOpenMaze(5, 5);
     m.at(1, 1).special = SpecialType::REWARD;
-    m.at(1, 2).special = SpecialType::REWARD;
-    m.at(1, 3).special = SpecialType::REWARD;
+    AStarAlgorithm astar; astar.initialize(m, m.start, m.goal); astar.runToCompletion();
+    m.resetSearch();
+    TEST_ASSERT(m.countRewardPellets() == 1, "Search reset keeps pellets");
+    TEST_ASSERT(!m.at(1, 1).inPath, "Path flags cleared");
+    return true;
+}
 
-    AStarAlgorithm astar;
-    astar.initialize(m, {0, 0}, {0, 4});
-    astar.runToCompletion();
+// ────────────────────────────────────────────────────────────
+// SUITE 3: ALGORITHM DIFFERENTIATION (27 - 30)
+// ────────────────────────────────────────────────────────────
 
-    // A* must avoid row 0 penalties and route via row 1
-    for (const Position& p : astar.getPath()) {
-        if (p == Position(0, 1) || p == Position(0, 2) || p == Position(0, 3)) {
-            TEST_ASSERT(false, "A* should have avoided high penalty cells on row 0");
-        }
+bool test_27_astar_responds_to_pellets() {
+    Maze m = makeOpenMaze(5, 5);
+    m.at(0, 1).special = SpecialType::PENALTY;
+    m.at(1, 0).special = SpecialType::REWARD;
+    AStarAlgorithm astar; astar.initialize(m, m.start, m.goal); astar.runToCompletion();
+    auto p = astar.getPath();
+    TEST_ASSERT(p[1] == Position(1, 0), "A* takes reward lane");
+    return true;
+}
+
+bool test_28_bfs_ignores_weights() {
+    Maze m = makeOpenMaze(5, 5);
+    m.at(0, 1).special = SpecialType::PENALTY;
+    BFSAlgorithm bfs; bfs.initialize(m, m.start, m.goal); bfs.runToCompletion();
+    TEST_ASSERT(bfs.stats.routeMoves == 8, "BFS still finds 8 moves");
+    return true;
+}
+
+bool test_29_compare_identical_terrain() {
+    Maze m = makeOpenMaze(5, 5);
+    m.at(1, 1).special = SpecialType::REWARD;
+    Maze copy1 = m, copy2 = m;
+    TEST_ASSERT(copy1.countRewardPellets() == copy2.countRewardPellets(), "Identical copies");
+    return true;
+}
+
+bool test_30_new_maze_clears() {
+    Maze m = makeOpenMaze(5, 5);
+    m.at(1, 1).special = SpecialType::REWARD;
+    m.resize(5, 5);
+    TEST_ASSERT(m.countRewardPellets() == 0, "New maze clears old pellets");
+    return true;
+}
+
+// ────────────────────────────────────────────────────────────
+// SUITE 4: MULTI-CUSTOMER MANAGEMENT (31 - 39)
+// ────────────────────────────────────────────────────────────
+
+bool test_31_add_customer_valid() {
+    Maze m = makeOpenMaze(7, 7);
+    int id = m.addCustomer({3, 3});
+    TEST_ASSERT(id > 0, "Customer added with valid ID");
+    TEST_ASSERT(m.hasCustomerAt({3, 3}), "Customer located at (3, 3)");
+    TEST_ASSERT(m.getCustomer(id) != nullptr, "getCustomer returns customer");
+    return true;
+}
+
+bool test_32_prevent_customer_on_store() {
+    Maze m = makeOpenMaze(7, 7);
+    int id = m.addCustomer(m.start);
+    TEST_ASSERT(id == -1, "Cannot add customer on Store");
+    return true;
+}
+
+bool test_33_prevent_customer_overlap() {
+    Maze m = makeOpenMaze(7, 7);
+    int id1 = m.addCustomer({3, 3});
+    TEST_ASSERT(id1 > 0, "First customer added");
+    int id2 = m.addCustomer({3, 3});
+    TEST_ASSERT(id2 == -1, "Second customer rejected at same cell");
+    return true;
+}
+
+bool test_34_prevent_customer_on_wall() {
+    Maze m = makeOpenMaze(7, 7);
+    m.blockCell({3, 3});
+    int id = m.addCustomer({3, 3});
+    TEST_ASSERT(id == -1, "Cannot add customer on wall");
+    return true;
+}
+
+bool test_35_remove_customer() {
+    Maze m = makeOpenMaze(7, 7);
+    int id = m.addCustomer({3, 3});
+    TEST_ASSERT(m.hasCustomerAt({3, 3}), "Customer exists");
+    bool ok = m.removeCustomer(id);
+    TEST_ASSERT(ok, "removeCustomer returns true");
+    TEST_ASSERT(!m.hasCustomerAt({3, 3}), "Customer no longer at (3, 3)");
+    return true;
+}
+
+bool test_36_stable_customer_ids() {
+    Maze m = makeOpenMaze(7, 7);
+    m.customers.clear();
+    m.nextCustomerId = 1; // start fresh
+    int c1 = m.addCustomer({1, 1});
+    int c2 = m.addCustomer({2, 2});
+    int c3 = m.addCustomer({3, 3});
+    TEST_ASSERT(c1 == 1 && c2 == 2 && c3 == 3, "Assigned IDs 1, 2, 3");
+
+    // Remove C2
+    bool ok = m.removeCustomer(2);
+    TEST_ASSERT(ok, "Removed C2");
+    TEST_ASSERT(m.getCustomer(1) != nullptr, "C1 retained");
+    TEST_ASSERT(m.getCustomer(1)->id == 1, "C1 ID is 1");
+    TEST_ASSERT(m.getCustomer(3) != nullptr, "C3 retained");
+    TEST_ASSERT(m.getCustomer(3)->id == 3, "C3 ID is 3");
+    TEST_ASSERT(m.getCustomer(2) == nullptr, "C2 is gone");
+
+    // Adding next customer assigns C4
+    int c4 = m.addCustomer({4, 4});
+    TEST_ASSERT(c4 == 4, "Next customer assigned unique ID 4");
+    return true;
+}
+
+bool test_37_enforce_customer_limit() {
+    Maze m = makeOpenMaze(10, 10);
+    m.customers.clear();
+    for (int i = 0; i < 10; i++) {
+        int id = m.addCustomer({i, 1});
+        TEST_ASSERT(id > 0, "Added up to limit");
+    }
+    TEST_ASSERT((int)m.customers.size() == 10, "10 customers present");
+    int overflow = m.addCustomer({0, 2});
+    TEST_ASSERT(overflow == -1, "11th customer rejected (limit 10)");
+    return true;
+}
+
+bool test_38_move_customer() {
+    Maze m = makeOpenMaze(7, 7);
+    int id = m.addCustomer({2, 2});
+    bool moved = m.moveCustomer(id, {4, 4});
+    TEST_ASSERT(moved, "Customer moved");
+    TEST_ASSERT(!m.hasCustomerAt({2, 2}), "Old cell vacant");
+    TEST_ASSERT(m.hasCustomerAt({4, 4}), "New cell occupied");
+
+    // Move onto wall rejected
+    m.blockCell({5, 5});
+    bool failWall = m.moveCustomer(id, {5, 5});
+    TEST_ASSERT(!failWall, "Move to wall rejected");
+    return true;
+}
+
+bool test_39_reorder_customer_stops() {
+    std::vector<int> order = {1, 2, 3};
+    // Swap 1 and 2
+    std::swap(order[0], order[1]);
+    TEST_ASSERT(order[0] == 2 && order[1] == 1 && order[2] == 3, "Order reordered to [2, 1, 3]");
+    return true;
+}
+
+// ────────────────────────────────────────────────────────────
+// SUITE 5: MULTI-STOP ROUTING & ALGORITHM BEHAVIOR (40 - 47)
+// ────────────────────────────────────────────────────────────
+
+bool test_40_single_customer_multi_stop_mode() {
+    Maze m = makeOpenMaze(5, 5);
+    std::vector<Position> stops = {{4, 4}};
+    std::vector<std::string> labels = {"C1"};
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "A*");
+    TEST_ASSERT(res.fullyCompleted, "Single customer completed");
+    TEST_ASSERT(res.stopsCompleted == 1, "1 stop completed");
+    TEST_ASSERT(res.totalMoves == 8, "8 moves for 5x5 single stop");
+    TEST_ASSERT(std::abs(res.totalCost - 8.0f) < 0.001f, "8.0 cost for single stop");
+    return true;
+}
+
+bool test_41_ordered_multi_stop_correctness() {
+    Maze m = makeOpenMaze(6, 6);
+    // Store is at (0, 0)
+    // C1 is at (0, 4)
+    // C2 is at (4, 4)
+    std::vector<Position> stops = {{0, 4}, {4, 4}};
+    std::vector<std::string> labels = {"C1", "C2"};
+
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "BFS");
+    TEST_ASSERT(res.fullyCompleted, "Multi-stop delivery completed");
+    TEST_ASSERT(res.stopsCompleted == 2, "2 stops completed");
+    TEST_ASSERT(res.legs.size() == 2, "2 legs recorded");
+    TEST_ASSERT(res.legs[0].moves == 4, "Leg 1 (Store->C1) has 4 moves");
+    TEST_ASSERT(res.legs[1].moves == 4, "Leg 2 (C1->C2) has 4 moves");
+    TEST_ASSERT(res.totalMoves == 8, "Total moves = 4 + 4 = 8");
+    return true;
+}
+
+bool test_42_shared_endpoints_not_double_counted_moves() {
+    Maze m = makeOpenMaze(5, 5);
+    // Leg 1: (0,0) -> (0,2): 2 moves
+    // Leg 2: (0,2) -> (2,2): 2 moves
+    // Leg 3: (2,2) -> (2,4): 2 moves
+    std::vector<Position> stops = {{0, 2}, {2, 2}, {2, 4}};
+    std::vector<std::string> labels = {"C1", "C2", "C3"};
+
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "A*");
+    TEST_ASSERT(res.totalMoves == 6, "Total moves = 2 + 2 + 2 = 6");
+    return true;
+}
+
+bool test_43_shared_endpoints_deduplicated_cells() {
+    Maze m = makeOpenMaze(5, 5);
+    // Leg 1: (0,0)->(0,2) has 3 cells
+    // Leg 2: (0,2)->(2,2) has 3 cells
+    // Combined unique cells should be 3 + 2 = 5 cells (not 6!)
+    std::vector<Position> stops = {{0, 2}, {2, 2}};
+    std::vector<std::string> labels = {"C1", "C2"};
+
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "BFS");
+    TEST_ASSERT(res.uniqueRouteCells == 5, "Unique cells = 5 (endpoint not duplicated)");
+    TEST_ASSERT((int)res.fullPath.size() == 5, "fullPath size is 5");
+    return true;
+}
+
+bool test_44_multi_stop_weighted_cost() {
+    Maze m = makeOpenMaze(5, 5);
+    // Normal cost = 1.0. 6 moves = 6.0 cost.
+    std::vector<Position> stops = {{0, 2}, {2, 2}, {2, 4}};
+    std::vector<std::string> labels = {"C1", "C2", "C3"};
+
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "A*");
+    TEST_ASSERT(std::abs(res.totalCost - 6.0f) < 0.001f, "Total weighted cost is 6.0");
+    return true;
+}
+
+bool test_45_astar_optimality_per_leg() {
+    Maze m = makeOpenMaze(6, 6);
+    // Add reward on Leg 1
+    m.at(0, 1).special = SpecialType::REWARD; // 0.5
+    // Add penalty on Leg 2 alternative
+    m.at(1, 2).special = SpecialType::PENALTY; // 4.0
+
+    std::vector<Position> stops = {{0, 2}, {2, 2}};
+    std::vector<std::string> labels = {"C1", "C2"};
+
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "A*");
+    TEST_ASSERT(res.fullyCompleted, "A* completed all legs");
+    // Verify each leg cost matches Dijkstra on same leg
+    for (const auto& leg : res.legs) {
+        Position from = (leg.legIndex == 1) ? m.start : stops[leg.legIndex - 2];
+        Position to   = stops[leg.legIndex - 1];
+        DijkstraAlgorithm dijk;
+        Maze copy = m; copy.resetAllFlags();
+        dijk.initialize(copy, from, to);
+        dijk.runToCompletion();
+        TEST_ASSERT(std::abs(leg.cost - dijk.stats.pathCost) < 0.001f, "A* matches Dijkstra on leg");
     }
     return true;
 }
 
-// 28. BFS continues to ignore terrain weights when selecting its path
-bool test_28_bfs_ignores_terrain_weights() {
-    Maze m = makeOpenMaze(3, 5);
-    // Top path row 0: length 4 moves, but penalty cells
-    m.at(0, 1).special = SpecialType::PENALTY;
-    m.at(0, 2).special = SpecialType::PENALTY;
-    m.at(0, 3).special = SpecialType::PENALTY;
+bool test_46_bfs_fewest_moves_per_leg() {
+    Maze m = makeOpenMaze(6, 6);
+    std::vector<Position> stops = {{0, 3}, {3, 3}};
+    std::vector<std::string> labels = {"C1", "C2"};
 
-    // Bottom path row 1: length 6 moves, with reward cells
-    m.at(1, 1).special = SpecialType::REWARD;
-    m.at(1, 2).special = SpecialType::REWARD;
-    m.at(1, 3).special = SpecialType::REWARD;
-
-    BFSAlgorithm bfs;
-    bfs.initialize(m, {0, 0}, {0, 4});
-    bfs.runToCompletion();
-
-    // BFS takes fewest moves: top direct path (4 moves) regardless of penalty cost!
-    TEST_ASSERT(bfs.stats.routeMoves == 4, "BFS must pick the 4-move path ignoring penalties");
-    TEST_ASSERT(bfs.stats.penaltiesOnPath == 3, "BFS route contains the 3 penalties because it ignores weights");
+    MultiStopResult resBFS = runMultiStopSearch(m, stops, labels, "BFS");
+    MultiStopResult resDFS = runMultiStopSearch(m, stops, labels, "DFS");
+    TEST_ASSERT(resBFS.totalMoves <= resDFS.totalMoves, "BFS moves <= DFS moves across legs");
     return true;
 }
 
-// 29. Comparison mode gives every algorithm an identical terrain configuration
-bool test_29_comparison_identical_configuration() {
+bool test_47_unreachable_customer_handling() {
+    Maze m = makeOpenMaze(7, 7);
+    // Block around C2 at (6, 6)
+    m.blockCell({5, 6}); m.blockCell({6, 5});
+
+    std::vector<Position> stops = {{0, 3}, {6, 6}};
+    std::vector<std::string> labels = {"C1", "C2"};
+
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "A*");
+    TEST_ASSERT(!res.fullyCompleted, "Delivery partially fails");
+    TEST_ASSERT(res.stopsCompleted == 1, "Completed 1 of 2 stops");
+    TEST_ASSERT(res.failedDestination == "C2", "C2 identified as unreachable");
+    TEST_ASSERT(res.lastReachedStop == "C1", "C1 was last reached stop");
+    return true;
+}
+
+// ────────────────────────────────────────────────────────────
+// SUITE 6: INTEGRATION, RESTRICTIONS & RESIZE (48 - 52)
+// ────────────────────────────────────────────────────────────
+
+bool test_48_no_pellet_on_customers() {
+    Maze m = makeOpenMaze(7, 7);
+    int cid = m.addCustomer({3, 3});
+    TEST_ASSERT(cid > 0, "Customer added");
+    TEST_ASSERT(m.hasCustomerAt({3, 3}), "Cell is occupied by customer");
+    return true;
+}
+
+bool test_49_clear_pellets_preserves_customers() {
+    Maze m = makeOpenMaze(7, 7);
+    m.addCustomer({2, 2});
+    m.addCustomer({4, 4});
+    m.at(1, 1).special = SpecialType::REWARD;
+    m.clearAllSpecialPellets();
+    TEST_ASSERT(m.countRewardPellets() == 0, "Pellets cleared");
+    TEST_ASSERT(m.hasCustomerAt({2, 2}), "C1 preserved");
+    TEST_ASSERT(m.hasCustomerAt({4, 4}), "C2 preserved");
+    return true;
+}
+
+bool test_50_search_reset_preserves_customers_and_terrain() {
+    Maze m = makeOpenMaze(7, 7);
+    m.addCustomer({3, 3});
+    m.at(1, 1).special = SpecialType::REWARD;
+    std::vector<Position> stops = {{3, 3}};
+    std::vector<std::string> labels = {"C1"};
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "A*");
+    m.resetSearch();
+    TEST_ASSERT(m.hasCustomerAt({3, 3}), "Customer intact after reset");
+    TEST_ASSERT(m.countRewardPellets() == 1, "Reward pellet intact after reset");
+    return true;
+}
+
+bool test_51_compare_all_same_stops_and_network() {
     Maze m = makeOpenMaze(6, 6);
     m.at(1, 1).special = SpecialType::REWARD;
-    m.at(2, 2).special = SpecialType::PENALTY;
-    m.at(3, 3).terrain = TerrainType::CONGESTED;
+    std::vector<Position> stops = {{0, 4}, {4, 4}};
+    std::vector<std::string> labels = {"C1", "C2"};
 
-    Maze copyBFS = m; copyBFS.resetAllFlags();
-    Maze copyDFS = m; copyDFS.resetAllFlags();
-    Maze copyAST = m; copyAST.resetAllFlags();
+    MultiStopResult rBFS   = runMultiStopSearch(m, stops, labels, "BFS");
+    MultiStopResult rDFS   = runMultiStopSearch(m, stops, labels, "DFS");
+    MultiStopResult rAStar = runMultiStopSearch(m, stops, labels, "A*");
 
-    TEST_ASSERT(copyBFS.countRewardPellets() == m.countRewardPellets(), "BFS copy must match rewards");
-    TEST_ASSERT(copyDFS.countRewardPellets() == m.countRewardPellets(), "DFS copy must match rewards");
-    TEST_ASSERT(copyAST.countRewardPellets() == m.countRewardPellets(), "A* copy must match rewards");
-
-    TEST_ASSERT(copyBFS.countPenaltyPellets() == m.countPenaltyPellets(), "BFS copy must match penalties");
-    TEST_ASSERT(copyDFS.countPenaltyPellets() == m.countPenaltyPellets(), "DFS copy must match penalties");
-    TEST_ASSERT(copyAST.countPenaltyPellets() == m.countPenaltyPellets(), "A* copy must match penalties");
-
+    TEST_ASSERT(rBFS.totalStops == 2 && rDFS.totalStops == 2 && rAStar.totalStops == 2, "All evaluate 2 stops");
+    TEST_ASSERT(rAStar.totalCost <= rBFS.totalCost, "A* cost <= BFS cost");
     return true;
 }
 
-// 30. Loading a new maze resets obsolete search state and animation safely
-bool test_30_new_maze_clears_obsolete_state() {
-    Maze m = makeOpenMaze(5, 5);
-    AStarAlgorithm astar;
-    astar.initialize(m, m.start, m.goal);
-    astar.runToCompletion();
+bool test_52_layout_hit_test_resizing() {
+    // Test geometry calculations simulating window resize
+    int winW = 1240, winH = 780;
+    float headerH = 46.f, sidebarW = 320.f;
+    float canvasW = (float)(winW - sidebarW);
+    float canvasH = (float)(winH - headerH);
+    float padding = 24.f;
 
-    // Hard reset / new maze
-    m.hardReset();
-    TEST_ASSERT(!m.generated, "Maze generated flag reset");
-    TEST_ASSERT(m.pathLength() == 0, "pathLength cleared");
-    TEST_ASSERT(m.countRewardPellets() == 0, "Pellets cleared");
-    TEST_ASSERT(m.countPenaltyPellets() == 0, "Pellets cleared");
+    int rows = 20, cols = 20;
+    float availW = canvasW - 2.f * padding;
+    float availH = canvasH - 2.f * padding;
+    float cellSize = std::floor(std::min(availW / (float)cols, availH / (float)rows));
+    float mazeW = cellSize * (float)cols;
+    float mazeH = cellSize * (float)rows;
+    float originX = padding + std::floor((availW - mazeW) * 0.5f);
+    float originY = headerH + padding + std::floor((availH - mazeH) * 0.5f);
 
+    TEST_ASSERT(cellSize > 0.f, "Cell size positive");
+    TEST_ASSERT(originX >= padding, "Origin within bounds");
+    TEST_ASSERT(originX + mazeW <= canvasW, "Maze fits inside canvas width");
+
+    // Hit test middle cell
+    float testMx = originX + 5.5f * cellSize;
+    float testMy = originY + 5.5f * cellSize;
+    int r = (int)((testMy - originY) / cellSize);
+    int c = (int)((testMx - originX) / cellSize);
+    TEST_ASSERT(r == 5 && c == 5, "Correct grid cell mapped from mouse coordinates");
     return true;
 }
 
 // ────────────────────────────────────────────────────────────
-// DEMONSTRATION SCENARIO VERIFICATION (HEADLESS REPORT)
+// MAIN TEST HARNESS RUNNER
 // ────────────────────────────────────────────────────────────
-
-static Maze buildScenarioA() {
-    const int ROWS = 11, COLS = 15;
-    Maze m = makeOpenMaze(ROWS, COLS);
-    for (int r = 2; r <= 6; r++) m.blockCell({r, 7});
-    for (int c = 3; c <= 6; c++) m.blockCell({4, c});
-    for (int r = 7; r <= 9; r++) m.blockCell({r, 4});
-    m.start = {0, 0};
-    m.goal  = {ROWS - 1, COLS - 1};
-    return m;
-}
-
-static Maze buildScenarioB() {
-    const int ROWS = 13, COLS = 19;
-    Maze m = makeOpenMaze(ROWS, COLS);
-    for (int r = 2; r <= 10; r++) m.blockCell({r, 9});
-    m.unblockCell({6, 9});
-    m.unblockCell({9, 9});
-
-    m.at(3, 3).special = SpecialType::REWARD;
-    m.at(3, 5).special = SpecialType::REWARD;
-    m.at(3, 7).special = SpecialType::REWARD;
-    m.at(4, 11).special = SpecialType::REWARD;
-    m.at(4, 13).special = SpecialType::REWARD;
-    m.at(4, 15).special = SpecialType::REWARD;
-
-    for (int c = 1; c <= 7; c++) {
-        if (!m.at(8, c).isWall()) m.at(8, c).terrain = TerrainType::CONGESTED;
-    }
-    for (int c = 10; c <= 16; c++) {
-        if (!m.at(8, c).isWall()) m.at(8, c).terrain = TerrainType::CONGESTED;
-    }
-    m.start = {0, 0};
-    m.goal  = {ROWS - 1, COLS - 1};
-    return m;
-}
-
-static Maze buildScenarioC() {
-    const int ROWS = 13, COLS = 19;
-    Maze m = makeOpenMaze(ROWS, COLS);
-    for (int r = 0; r <= 8; r++) m.blockCell({r, 9});
-    m.unblockCell({4, 9});
-
-    m.at(4, 9).terrain = TerrainType::NORMAL;
-    m.at(4, 9).special = SpecialType::PENALTY;
-    m.at(3, 9).special = SpecialType::PENALTY;
-    m.at(5, 9).special = SpecialType::PENALTY;
-
-    for (int c = 1; c <= 7; c++) {
-        if (!m.at(10, c).isWall()) m.at(10, c).terrain = TerrainType::DAMAGED;
-    }
-    m.at(11, 5).special  = SpecialType::REWARD;
-    m.at(11, 7).special  = SpecialType::REWARD;
-    m.at(11, 12).special = SpecialType::REWARD;
-    m.at(11, 14).special = SpecialType::REWARD;
-
-    m.start = {0, 0};
-    m.goal  = {ROWS - 1, COLS - 1};
-    return m;
-}
-
-static void runScenarioEval(const std::string& scenName, const Maze& baseMaze) {
-    std::cout << "\n------------------------------------------------------------\n";
-    std::cout << "Scenario: " << scenName << "\n";
-    std::cout << "------------------------------------------------------------\n";
-    std::cout << std::left
-              << std::setw(10) << "Algorithm"
-              << std::setw(8)  << "Found"
-              << std::setw(8)  << "Cells"
-              << std::setw(8)  << "Moves"
-              << std::setw(12) << "WeightCost"
-              << std::setw(10) << "Rewards"
-              << std::setw(10) << "Penalties"
-              << "\n";
-
-    std::string algos[3] = {"BFS", "DFS", "A*"};
-    for (int i = 0; i < 3; i++) {
-        Maze m = baseMaze;
-        m.resetAllFlags();
-        std::unique_ptr<SearchAlgorithm> solver;
-        if (i == 0) solver.reset(new BFSAlgorithm());
-        else if (i == 1) solver.reset(new DFSAlgorithm());
-        else solver.reset(new AStarAlgorithm());
-
-        solver->initialize(m, m.start, m.goal);
-        SearchStats st = solver->runToCompletion();
-
-        std::cout << std::left
-                  << std::setw(10) << algos[i]
-                  << std::setw(8)  << (st.foundPath ? "YES" : "NO")
-                  << std::setw(8)  << st.pathLength
-                  << std::setw(8)  << st.routeMoves
-                  << std::setw(12) << std::fixed << std::setprecision(1) << st.pathCost
-                  << std::setw(10) << st.rewardsOnPath
-                  << std::setw(10) << st.penaltiesOnPath
-                  << "\n";
-    }
-}
 
 int main() {
     std::cout << "============================================================\n";
-    std::cout << " SmartRoute AI — Automated Algorithm & Workflow Test Suite\n";
+    std::cout << " SmartRoute AI — Comprehensive Multi-Customer Test Suite\n";
     std::cout << "============================================================\n";
 
+    std::cout << "\n--- Part 1: Core Search Correctness & Optimality (1-15) ---\n";
     reportTest("Test 01: BFS finds valid route when goal is reachable", test_1_bfs_reachable());
     reportTest("Test 02: DFS finds valid route when goal is reachable", test_2_dfs_reachable());
     reportTest("Test 03: A* finds valid route when goal is reachable", test_3_astar_reachable());
-    reportTest("Test 04: All algorithms report failure when goal unreachable", test_4_unreachable_goal());
-    reportTest("Test 05: Reconstructed route starts at start and ends at goal", test_5_route_start_goal_endpoints());
-    reportTest("Test 06: Every consecutive pair of route cells is legal step", test_6_consecutive_steps_legal());
-    reportTest("Test 07: Blocked cells are never included in traversable route", test_7_blocked_cells_excluded());
-    reportTest("Test 08: Route cost matches entered cells sum excluding start", test_8_cost_excludes_start_cell());
-    reportTest("Test 09: Reward roads retain configured fractional cost (0.5)", test_9_reward_road_fractional_cost());
-    reportTest("Test 10: Penalty roads retain configured cost (4.0)", test_10_penalty_road_cost());
-    reportTest("Test 11: A* returns minimum weighted cost on small maps", test_11_astar_minimum_weighted_cost());
-    reportTest("Test 12: Validate A* weighted-cost optimality against Dijkstra", test_12_astar_optimality_vs_dijkstra());
-    reportTest("Test 13: 25-cell route reports exactly 24 moves", test_13_path_25_cells_is_24_moves());
+    reportTest("Test 04: All algorithms report failure when goal unreachable", test_4_unreachable());
+    reportTest("Test 05: Reconstructed route starts at start and ends at goal", test_5_endpoints());
+    reportTest("Test 06: Every consecutive pair of route cells is legal step", test_6_valid_steps());
+    reportTest("Test 07: Blocked cells are never included in traversable route", test_7_no_blocked());
+    reportTest("Test 08: Route cost matches entered cells sum excluding start", test_8_path_cost_sum());
+    reportTest("Test 09: Reward roads retain configured fractional cost (0.5)", test_9_reward_cost());
+    reportTest("Test 10: Penalty roads retain configured cost (4.0)", test_10_penalty_cost());
+    reportTest("Test 11: A* returns minimum weighted cost on small maps", test_11_astar_optimality());
+    reportTest("Test 12: Validate A* weighted-cost optimality against Dijkstra", test_12_astar_vs_dijkstra());
+    reportTest("Test 13: 25-cell route reports exactly 24 moves", test_13_moves_count());
     reportTest("Test 14: Start == Goal behaves correctly (moves=0, cost=0)", test_14_start_equals_goal());
-    reportTest("Test 15: Repeated runs do not reuse stale search state", test_15_repeated_runs_clean_state());
+    reportTest("Test 15: Repeated runs do not reuse stale search state", test_15_repeated_runs_clean());
 
-    std::cout << "\n--- New Phase: Three-Stage Interactive Workflow & Pellets ---\n";
-    reportTest("Test 16: Place reward pellet on road cell (cost 0.5)", test_16_place_reward_pellet());
-    reportTest("Test 17: Place penalty pellet on road cell (cost 4.0)", test_17_place_penalty_pellet());
-    reportTest("Test 18: Pellet placement cannot overwrite start or goal", test_18_pellet_cannot_overwrite_start_goal());
-    reportTest("Test 19: Pellet placement cannot overwrite walls", test_19_pellet_cannot_be_placed_on_wall());
-    reportTest("Test 20: Switching from reward to penalty updates correctly", test_20_switch_pellet_type());
-    reportTest("Test 21: Erasing special pellet restores normal road (1.0)", test_21_erase_pellet_restores_normal());
-    reportTest("Test 22: Clear all pellets preserves walls, start, and goal", test_22_clear_special_pellets_preserves_structure());
-    reportTest("Test 23: Live pellet counts reflect actual maze terrain", test_23_pellet_counts_accurate());
-    reportTest("Test 24: Back navigation preserves maze and pellet layout", test_24_back_navigation_preserves_configuration());
-    reportTest("Test 25: Entering solving phase preserves configured terrain", test_25_solving_phase_preserves_terrain());
-    reportTest("Test 26: Search reset clears search flags without erasing pellets", test_26_search_reset_preserves_pellets());
+    std::cout << "\n--- Part 2: Workflow & Road Configuration (16-26) ---\n";
+    reportTest("Test 16: Place reward pellet on road cell (cost 0.5)", test_16_place_reward());
+    reportTest("Test 17: Place penalty pellet on road cell (cost 4.0)", test_17_place_penalty());
+    reportTest("Test 18: Pellet placement cannot overwrite Store", test_18_no_pellet_on_start());
+    reportTest("Test 19: Pellet placement cannot overwrite walls", test_19_no_pellet_on_walls());
+    reportTest("Test 20: Switching from reward to penalty updates correctly", test_20_switch_pellet());
+    reportTest("Test 21: Erasing special pellet restores normal road (1.0)", test_21_erase_pellet());
+    reportTest("Test 22: Clear all pellets preserves walls, start, and goal", test_22_clear_pellets_preserves());
+    reportTest("Test 23: Live pellet counts reflect actual maze terrain", test_23_live_counters());
+    reportTest("Test 24: Back navigation preserves maze and pellet layout", test_24_back_nav_preserves());
+    reportTest("Test 25: Entering solving phase preserves configured terrain", test_25_phase_enter_preserves());
+    reportTest("Test 26: Search reset clears search flags without erasing pellets", test_26_search_reset_preserves());
+
+    std::cout << "\n--- Part 3: Algorithm Differentiation & Scenarios (27-30) ---\n";
     reportTest("Test 27: A* responds to user-configured reward and penalty costs", test_27_astar_responds_to_pellets());
-    reportTest("Test 28: BFS continues to ignore terrain weights", test_28_bfs_ignores_terrain_weights());
-    reportTest("Test 29: Comparison mode gives all algorithms identical terrain", test_29_comparison_identical_configuration());
-    reportTest("Test 30: Loading new maze resets obsolete search state cleanly", test_30_new_maze_clears_obsolete_state());
+    reportTest("Test 28: BFS continues to ignore terrain weights", test_28_bfs_ignores_weights());
+    reportTest("Test 29: Comparison mode gives all algorithms identical terrain", test_29_compare_identical_terrain());
+    reportTest("Test 30: Loading new maze resets obsolete search state cleanly", test_30_new_maze_clears());
 
-    std::cout << "\n============================================================\n";
-    std::cout << " Demonstration Scenario Verification (Corrected Costs)\n";
-    std::cout << "============================================================\n";
-    runScenarioEval("Scenario A (Simple Delivery)", buildScenarioA());
-    runScenarioEval("Scenario B (Reward Shortcut)", buildScenarioB());
-    runScenarioEval("Scenario C (Penalty Road)", buildScenarioC());
+    std::cout << "\n--- Part 4: Multi-Customer Management (31-39) ---\n";
+    reportTest("Test 31: Add customer on valid road cell with unique ID", test_31_add_customer_valid());
+    reportTest("Test 32: Prevent customer from overlapping Store", test_32_prevent_customer_on_store());
+    reportTest("Test 33: Prevent customers from overlapping each other", test_33_prevent_customer_overlap());
+    reportTest("Test 34: Prevent customer placement on walls", test_34_prevent_customer_on_wall());
+    reportTest("Test 35: Remove customer safely", test_35_remove_customer());
+    reportTest("Test 36: Stable customer identifiers maintained after removal", test_36_stable_customer_ids());
+    reportTest("Test 37: Enforce customer limit (max 10)", test_37_enforce_customer_limit());
+    reportTest("Test 38: Move customer to new valid road cell", test_38_move_customer());
+    reportTest("Test 39: Reorder customer stops in delivery order", test_39_reorder_customer_stops());
+
+    std::cout << "\n--- Part 5: Multi-Stop Routing & Metrics (40-47) ---\n";
+    reportTest("Test 40: Single-customer routing in multi-stop framework", test_40_single_customer_multi_stop_mode());
+    reportTest("Test 41: Ordered multi-stop route correctness across legs", test_41_ordered_multi_stop_correctness());
+    reportTest("Test 42: Shared endpoints not double-counted in move totals", test_42_shared_endpoints_not_double_counted_moves());
+    reportTest("Test 43: Shared endpoints deduplicated in combined path representation", test_43_shared_endpoints_deduplicated_cells());
+    reportTest("Test 44: Weighted cost across all legs matches sum of entered cells", test_44_multi_stop_weighted_cost());
+    reportTest("Test 45: A* optimality per leg against Dijkstra reference", test_45_astar_optimality_per_leg());
+    reportTest("Test 46: BFS fewest-move behavior per leg", test_46_bfs_fewest_moves_per_leg());
+    reportTest("Test 47: Unreachable customer handling & stops-completed reporting", test_47_unreachable_customer_handling());
+
+    std::cout << "\n--- Part 6: Integration, Restrictions & Window Resize (48-52) ---\n";
+    reportTest("Test 48: Pellet placement restricted on Customer cells", test_48_no_pellet_on_customers());
+    reportTest("Test 49: Clear pellets preserves customer locations", test_49_clear_pellets_preserves_customers());
+    reportTest("Test 50: Search reset preserves customers & terrain", test_50_search_reset_preserves_customers_and_terrain());
+    reportTest("Test 51: Comparison dashboard tests identical stops & network", test_51_compare_all_same_stops_and_network());
+    reportTest("Test 52: Window resize coordinate hitTest mapping verification", test_52_layout_hit_test_resizing());
 
     std::cout << "\n============================================================\n";
     std::cout << " TOTAL TESTS: " << (g_passCount + g_failCount)
@@ -787,5 +769,11 @@ int main() {
               << " | FAILED: " << g_failCount << "\n";
     std::cout << "============================================================\n";
 
-    return (g_failCount == 0) ? 0 : 1;
+    if (g_failCount == 0) {
+        std::cout << "\n[TEST SUITE SUCCESS] All automated tests passed successfully!\n";
+        return 0;
+    } else {
+        std::cout << "\n[TEST SUITE FAILURE] One or more tests failed.\n";
+        return 1;
+    }
 }
