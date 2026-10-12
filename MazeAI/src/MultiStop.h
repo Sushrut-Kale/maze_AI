@@ -41,6 +41,7 @@ struct MultiStopResult {
     int rewardsTraversed = 0;
     int penaltiesTraversed = 0;
     std::vector<Position> fullPath;      // Concatenated path with shared endpoints deduplicated
+    std::vector<int> stopPathIndices;   // Index in fullPath where each customer stop is reached
     std::vector<MultiLegStats> legs;
     std::string failedDestination = "";
     std::string lastReachedStop = "";
@@ -77,7 +78,7 @@ inline MultiStopResult runMultiStopSearch(const Maze& network,
     res.stopSequenceStr = seq;
 
     if (stopPositions.empty()) {
-        res.fullyCompleted = true;
+        res.fullyCompleted = false;
         return res;
     }
 
@@ -107,12 +108,16 @@ inline MultiStopResult runMultiStopSearch(const Maze& network,
         auto t1 = std::chrono::high_resolution_clock::now();
         leg.timeMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
 
-        leg.found = algo->foundPath();
         leg.nodesExplored = st.nodesExplored;
         res.totalNodesExplored += leg.nodesExplored;
         res.totalTimeMs += leg.timeMs;
 
-        if (!leg.found) {
+        std::vector<Position> lPath = algo->getPath();
+        std::string valErr;
+        bool valid = algo->foundPath() && validatePath(network, lPath, currentLegStart, legGoal, &valErr);
+        leg.found = valid;
+
+        if (!valid) {
             leg.moves = 0;
             leg.cost = 0.0f;
             res.legs.push_back(leg);
@@ -122,7 +127,7 @@ inline MultiStopResult runMultiStopSearch(const Maze& network,
             break;
         }
 
-        leg.path = algo->getPath();
+        leg.path = lPath;
         leg.moves = (int)leg.path.size() > 0 ? (int)leg.path.size() - 1 : 0;
         leg.cost = network.pathCostWeighted(leg.path);
 
@@ -139,12 +144,13 @@ inline MultiStopResult runMultiStopSearch(const Maze& network,
                 combinedPath.push_back(leg.path[pIdx]);
             }
         }
+        res.stopPathIndices.push_back((int)combinedPath.size() - 1);
 
         currentLegStart = legGoal;
         currentLegStartLabel = legGoalLabel;
     }
 
-    res.fullyCompleted = (res.stopsCompleted == res.totalStops);
+    res.fullyCompleted = (res.stopsCompleted == res.totalStops && res.totalStops > 0);
     res.fullPath = combinedPath;
     res.uniqueRouteCells = (int)combinedPath.size();
 

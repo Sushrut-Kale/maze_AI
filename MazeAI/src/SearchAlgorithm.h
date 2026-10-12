@@ -64,6 +64,7 @@ public:
 
 protected:
     Maze*       pMaze     = nullptr;
+    Position    startPos  = Position::invalid();
     Position    goalPos   = Position::invalid();
     bool        finished_ = false;
     bool        found_    = false;
@@ -80,18 +81,46 @@ protected:
         return minCost * (float)a.manhattan(goalPos);
     }
 
-    // Reconstruct path from parent map, mark cells in maze
+    // Reconstruct path from parent map, mark cells in maze, and validate
     void reconstructPath(Position goal) {
         path.clear();
+        if (!goal.isValid() || !pMaze) {
+            stats.foundPath = false;
+            found_ = false;
+            return;
+        }
+
+        if (startPos.isValid() && goal == startPos) {
+            path.push_back(startPos);
+            pMaze->markPath(path);
+            stats.pathLength      = 1;
+            stats.routeMoves      = 0;
+            stats.pathCost        = 0.f;
+            stats.rewardsOnPath   = 0;
+            stats.penaltiesOnPath = 0;
+            stats.foundPath       = true;
+            found_                = true;
+            return;
+        }
+
         Position cur = goal;
         int safety = pMaze->rows * pMaze->cols + 5;
         while (cur.isValid() && safety-- > 0) {
             path.push_back(cur);
+            if (startPos.isValid() && cur == startPos) break;
             auto it = parent.find(cur);
             if (it == parent.end() || !it->second.isValid()) break;
             cur = it->second;
         }
         std::reverse(path.begin(), path.end());
+
+        // Validate endpoints
+        if (path.empty() || (startPos.isValid() && path.front() != startPos) || path.back() != goal) {
+            path.clear();
+            stats.foundPath = false;
+            found_          = false;
+            return;
+        }
 
         pMaze->markPath(path);
 
@@ -101,5 +130,59 @@ protected:
         stats.rewardsOnPath   = pMaze->countRewardsOnPath();
         stats.penaltiesOnPath = pMaze->countPenaltiesOnPath();
         stats.foundPath       = true;
+        found_                = true;
     }
 };
+
+// ── Standalone Path Validation Helper ────────────────────────
+inline bool validatePath(const Maze& maze,
+                         const std::vector<Position>& p,
+                         Position expectedStart,
+                         Position expectedGoal,
+                         std::string* errOut = nullptr) {
+    if (p.empty()) {
+        if (errOut) *errOut = "Path is empty";
+        return false;
+    }
+    if (p.front() != expectedStart) {
+        if (errOut) *errOut = "Path does not begin at expected start";
+        return false;
+    }
+    if (p.back() != expectedGoal) {
+        if (errOut) *errOut = "Path does not terminate at expected destination";
+        return false;
+    }
+    if (expectedStart == expectedGoal) {
+        return (p.size() == 1);
+    }
+    for (size_t i = 0; i < p.size(); ++i) {
+        const Position& cur = p[i];
+        if (!maze.inBounds(cur)) {
+            if (errOut) *errOut = "Path cell is out of maze bounds";
+            return false;
+        }
+        if (maze.at(cur).isWall()) {
+            if (errOut) *errOut = "Path traverses impassable / wall cell";
+            return false;
+        }
+        if (i > 0) {
+            const Position& prev = p[i - 1];
+            int dr = cur.row - prev.row;
+            int dc = cur.col - prev.col;
+            if (std::abs(dr) + std::abs(dc) != 1) {
+                if (errOut) *errOut = "Consecutive cells are not adjacent grid neighbors";
+                return false;
+            }
+            int dir = -1;
+            if (dr == -1) dir = TOP;
+            else if (dr == 1) dir = BOTTOM;
+            else if (dc == -1) dir = LEFT;
+            else if (dc == 1) dir = RIGHT;
+            if (dir < 0 || maze.at(prev).walls[dir] || maze.at(cur).walls[opp[dir]]) {
+                if (errOut) *errOut = "Path crosses impassable wall segment";
+                return false;
+            }
+        }
+    }
+    return true;
+}

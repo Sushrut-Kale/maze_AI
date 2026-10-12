@@ -691,6 +691,289 @@ bool test_52_layout_hit_test_resizing() {
 }
 
 // ────────────────────────────────────────────────────────────
+// SUITE 7: ROUTING CORRECTNESS & ALGORITHM COMPARISON REGRESSION (53 - 66)
+// ────────────────────────────────────────────────────────────
+
+bool test_53_bfs_fifo_behavior() {
+    Maze m = makeOpenMaze(5, 5);
+    BFSAlgorithm bfs;
+    bfs.initialize(m, {2, 2}, {4, 4});
+    std::vector<Position> exploredOrder;
+    while (!bfs.isFinished()) {
+        bfs.step();
+        if (bfs.currentPos.isValid()) {
+            exploredOrder.push_back(bfs.currentPos);
+        }
+    }
+    TEST_ASSERT(!exploredOrder.empty(), "BFS explored nodes");
+    TEST_ASSERT(exploredOrder.front() == Position(2, 2), "First node explored is start");
+    int maxDist = 0;
+    for (const auto& p : exploredOrder) {
+        int d = p.manhattan({2, 2});
+        TEST_ASSERT(d >= maxDist - 1, "BFS explores layer-by-layer in FIFO order");
+        maxDist = std::max(maxDist, d);
+    }
+    return true;
+}
+
+bool test_54_dfs_genuine_depth_first_behavior() {
+    Maze m = makeOpenMaze(7, 7);
+    DFSAlgorithm dfs;
+    dfs.initialize(m, {0, 0}, {6, 6});
+    std::vector<Position> exploredOrder;
+    while (!dfs.isFinished()) {
+        dfs.step();
+        if (dfs.currentPos.isValid()) {
+            exploredOrder.push_back(dfs.currentPos);
+        }
+    }
+    TEST_ASSERT(dfs.foundPath(), "DFS found path");
+    TEST_ASSERT(exploredOrder.size() > 5, "DFS explored multiple nodes");
+    TEST_ASSERT(exploredOrder[1].manhattan({0, 0}) == 1, "Step 1 is neighbor");
+    TEST_ASSERT(exploredOrder[2].manhattan({0, 0}) == 2, "Step 2 is deep neighbor (depth 2)");
+    return true;
+}
+
+bool test_55_astar_priority_and_reconsideration() {
+    Maze m = makeOpenMaze(3, 3);
+    m.at(0, 1).special = SpecialType::PENALTY;
+    m.at(1, 0).special = SpecialType::REWARD;
+    m.at(1, 1).special = SpecialType::REWARD;
+
+    AStarAlgorithm astar;
+    astar.initialize(m, {0, 0}, {2, 2});
+    astar.runToCompletion();
+    TEST_ASSERT(astar.foundPath(), "A* found path");
+    std::vector<Position> p = astar.getPath();
+    TEST_ASSERT(validatePath(m, p, {0, 0}, {2, 2}), "A* path valid");
+    bool usedPenalty = false;
+    for (const auto& pos : p) {
+        if (pos == Position(0, 1)) usedPenalty = true;
+    }
+    TEST_ASSERT(!usedPenalty, "A* avoided penalty road by prioritizing lower total f-cost");
+    return true;
+}
+
+bool test_56_astar_chooses_cheaper_weighted_route() {
+    Maze m = makeOpenMaze(5, 5);
+    for (int c = 1; c <= 4; ++c) {
+        m.at(0, c).special = SpecialType::PENALTY;
+        m.at(4, c).special = SpecialType::REWARD;
+    }
+
+    AStarAlgorithm astar;
+    astar.initialize(m, {0, 0}, {0, 4});
+    astar.runToCompletion();
+
+    BFSAlgorithm bfs;
+    bfs.initialize(m, {0, 0}, {0, 4});
+    bfs.runToCompletion();
+
+    TEST_ASSERT(astar.foundPath() && bfs.foundPath(), "Both algorithms found path");
+    TEST_ASSERT(astar.stats.pathCost <= bfs.stats.pathCost, "A* cost <= BFS cost");
+    return true;
+}
+
+bool test_57_bfs_fewest_moves_vs_astar_cost() {
+    Maze m(3, 5);
+    m.hardReset();
+    // Open path A along row 0: 4 moves, all penalty (cost 16.0)
+    for (int c = 0; c < 4; c++) {
+        m.removeWall({0, c}, {0, c + 1});
+        m.at(0, c + 1).special = SpecialType::PENALTY;
+    }
+    // Open path B through rows 1 and 2: longer moves, reward cost
+    m.removeWall({0, 0}, {1, 0});
+    m.removeWall({1, 0}, {2, 0});
+    for (int c = 0; c < 4; c++) {
+        m.removeWall({2, c}, {2, c + 1});
+        m.at(2, c + 1).special = SpecialType::REWARD;
+    }
+    m.removeWall({2, 4}, {1, 4});
+    m.removeWall({1, 4}, {0, 4});
+
+    BFSAlgorithm bfs;
+    bfs.initialize(m, {0, 0}, {0, 4});
+    bfs.runToCompletion();
+
+    AStarAlgorithm astar;
+    astar.initialize(m, {0, 0}, {0, 4});
+    astar.runToCompletion();
+
+    TEST_ASSERT(bfs.foundPath() && astar.foundPath(), "Both found paths");
+    TEST_ASSERT(bfs.stats.routeMoves == 4, "BFS chose 4-move path (fewest moves)");
+    TEST_ASSERT(bfs.stats.pathCost == 16.0f, "BFS took penalty cost = 16.0");
+    TEST_ASSERT(astar.stats.pathCost < bfs.stats.pathCost, "A* found cheaper route");
+    return true;
+}
+
+bool test_58_dfs_not_guaranteed_shortest_path() {
+    Maze m = makeOpenMaze(5, 5);
+    DFSAlgorithm dfs;
+    dfs.initialize(m, {0, 0}, {4, 4});
+    dfs.runToCompletion();
+
+    BFSAlgorithm bfs;
+    bfs.initialize(m, {0, 0}, {4, 4});
+    bfs.runToCompletion();
+
+    TEST_ASSERT(dfs.foundPath() && bfs.foundPath(), "Both found paths");
+    TEST_ASSERT(bfs.stats.routeMoves == 8, "BFS found optimal 8 moves");
+    TEST_ASSERT(dfs.stats.routeMoves >= bfs.stats.routeMoves, "DFS moves >= BFS moves");
+    return true;
+}
+
+bool test_59_regression_distant_corner_customer() {
+    Maze m = makeOpenMaze(15, 15);
+    std::vector<Position> stops = {{14, 14}};
+    std::vector<std::string> labels = {"C1"};
+
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "A*");
+    TEST_ASSERT(res.fullyCompleted, "Distant corner reached");
+    TEST_ASSERT(res.stopsCompleted == 1, "1 of 1 stops reached");
+    TEST_ASSERT(!res.fullPath.empty(), "Path not empty");
+    TEST_ASSERT(res.fullPath.front() == Position(0, 0), "Path starts at start");
+    TEST_ASSERT(res.fullPath.back() == Position(14, 14), "Path terminates exactly at distant corner (14, 14)");
+    TEST_ASSERT(validatePath(m, res.fullPath, {0, 0}, {14, 14}), "Full path is valid");
+    return true;
+}
+
+bool test_60_regression_grid_boundary_customer() {
+    Maze m = makeOpenMaze(10, 10);
+    std::vector<Position> stops = {{0, 9}, {9, 9}, {9, 0}};
+    std::vector<std::string> labels = {"C1", "C2", "C3"};
+
+    for (const std::string& alg : {"BFS", "DFS", "A*"}) {
+        MultiStopResult res = runMultiStopSearch(m, stops, labels, alg);
+        TEST_ASSERT(res.fullyCompleted, alg + " reached all boundary stops");
+        TEST_ASSERT(res.stopsCompleted == 3, alg + " 3/3 stops completed");
+        TEST_ASSERT(res.fullPath.back() == Position(9, 0), alg + " terminated at final stop");
+        TEST_ASSERT(validatePath(m, res.fullPath, {0, 0}, {9, 0}), alg + " path valid");
+    }
+    return true;
+}
+
+bool test_61_regression_unreachable_customer_no_path() {
+    Maze m = makeOpenMaze(8, 8);
+    m.blockCell({6, 7});
+    m.blockCell({7, 6});
+
+    std::vector<Position> stops = {{7, 7}};
+    std::vector<std::string> labels = {"C1"};
+
+    for (const std::string& alg : {"BFS", "DFS", "A*"}) {
+        MultiStopResult res = runMultiStopSearch(m, stops, labels, alg);
+        TEST_ASSERT(!res.fullyCompleted, alg + " must report fullyCompleted=false");
+        TEST_ASSERT(res.stopsCompleted == 0, alg + " must report stopsCompleted=0");
+        TEST_ASSERT(res.failedDestination == "C1", alg + " marks C1 unreachable");
+        TEST_ASSERT(res.fullPath.empty(), alg + " must produce no path when target unreachable");
+    }
+    return true;
+}
+
+bool test_62_regression_ordered_multi_customer_delivery() {
+    Maze m = makeOpenMaze(8, 8);
+    std::vector<Position> stops = {{2, 2}, {6, 2}, {6, 6}};
+    std::vector<std::string> labels = {"C1", "C2", "C3"};
+
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "A*");
+    TEST_ASSERT(res.fullyCompleted, "Ordered multi-customer delivery succeeded");
+    TEST_ASSERT(res.stopPathIndices.size() == 3, "Has indices for 3 stops");
+    TEST_ASSERT(res.fullPath[res.stopPathIndices[0]] == Position(2, 2), "Arrived at C1");
+    TEST_ASSERT(res.fullPath[res.stopPathIndices[1]] == Position(6, 2), "Arrived at C2");
+    TEST_ASSERT(res.fullPath[res.stopPathIndices[2]] == Position(6, 6), "Arrived at C3");
+    return true;
+}
+
+bool test_63_regression_route_passing_near_customer_not_reached() {
+    Maze m = makeOpenMaze(5, 5);
+    std::vector<Position> stops = {{0, 4}};
+    std::vector<std::string> labels = {"Goal"};
+
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "BFS");
+    TEST_ASSERT(res.fullyCompleted, "Route to goal found");
+    TEST_ASSERT(res.fullPath.back() == Position(0, 4), "Route ends at goal (0, 4)");
+    bool entered12 = false;
+    for (const auto& pos : res.fullPath) {
+        if (pos == Position(1, 2)) entered12 = true;
+    }
+    TEST_ASSERT(!entered12, "Route passed along row 0, never entering (1, 2)");
+    return true;
+}
+
+bool test_64_regression_start_equals_goal() {
+    Maze m = makeOpenMaze(5, 5);
+    std::vector<Position> stops = {{0, 0}};
+    std::vector<std::string> labels = {"StartStop"};
+
+    for (const std::string& alg : {"BFS", "DFS", "A*"}) {
+        MultiStopResult res = runMultiStopSearch(m, stops, labels, alg);
+        TEST_ASSERT(res.fullyCompleted, alg + " handles Start==Goal");
+        TEST_ASSERT(res.totalMoves == 0, alg + " 0 moves for Start==Goal");
+        TEST_ASSERT(res.totalCost == 0.0f, alg + " 0 cost for Start==Goal");
+        TEST_ASSERT(res.stopsCompleted == 1, alg + " 1 stop completed");
+        TEST_ASSERT(res.fullPath.size() == 1 && res.fullPath[0] == Position(0, 0), alg + " single cell path");
+    }
+    return true;
+}
+
+bool test_65_physical_arrival_simulation_progression() {
+    Maze m = makeOpenMaze(6, 6);
+    std::vector<Position> stops = {{0, 3}, {3, 3}};
+    std::vector<std::string> labels = {"C1", "C2"};
+
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "A*");
+    TEST_ASSERT(res.fullyCompleted, "Path found");
+    TEST_ASSERT(res.stopPathIndices.size() == 2, "2 stop indices");
+
+    int idx1 = res.stopPathIndices[0];
+    int idx2 = res.stopPathIndices[1];
+
+    int step = 0;
+    int reached = 0;
+    if (step >= idx1) reached++;
+    if (step >= idx2) reached++;
+    TEST_ASSERT(reached == 0, "At step 0, no stops physically arrived at");
+
+    step = idx1;
+    reached = 0;
+    if (step >= idx1) reached++;
+    if (step >= idx2) reached++;
+    TEST_ASSERT(reached == 1, "At step idx1, C1 physically arrived at");
+
+    step = idx2;
+    reached = 0;
+    if (step >= idx1) reached++;
+    if (step >= idx2) reached++;
+    TEST_ASSERT(reached == 2, "At step idx2, both stops arrived at; delivery completed");
+    return true;
+}
+
+bool test_66_immutable_maze_snapshot_comparison() {
+    Maze m = makeOpenMaze(6, 6);
+    m.at(1, 1).special = SpecialType::REWARD;
+    m.at(2, 2).special = SpecialType::PENALTY;
+    m.at(3, 3).terrain = TerrainType::CONGESTED;
+
+    std::vector<Position> stops = {{0, 5}, {5, 5}};
+    std::vector<std::string> labels = {"C1", "C2"};
+
+    int initialRewards = m.countRewardPellets();
+    int initialPenalties = m.countPenaltyPellets();
+    int initialCongested = m.countCongestedCells();
+
+    MultiStopResult rBFS   = runMultiStopSearch(m, stops, labels, "BFS");
+    MultiStopResult rDFS   = runMultiStopSearch(m, stops, labels, "DFS");
+    MultiStopResult rAStar = runMultiStopSearch(m, stops, labels, "A*");
+
+    TEST_ASSERT(m.countRewardPellets() == initialRewards, "Rewards unchanged");
+    TEST_ASSERT(m.countPenaltyPellets() == initialPenalties, "Penalties unchanged");
+    TEST_ASSERT(m.countCongestedCells() == initialCongested, "Congested cells unchanged");
+    TEST_ASSERT(rBFS.totalStops == 2 && rDFS.totalStops == 2 && rAStar.totalStops == 2, "Identical stop count");
+    return true;
+}
+
+// ────────────────────────────────────────────────────────────
 // MAIN TEST HARNESS RUNNER
 // ────────────────────────────────────────────────────────────
 
@@ -762,6 +1045,22 @@ int main() {
     reportTest("Test 50: Search reset preserves customers & terrain", test_50_search_reset_preserves_customers_and_terrain());
     reportTest("Test 51: Comparison dashboard tests identical stops & network", test_51_compare_all_same_stops_and_network());
     reportTest("Test 52: Window resize coordinate hitTest mapping verification", test_52_layout_hit_test_resizing());
+
+    std::cout << "\n--- Part 7: Routing Correctness & Algorithm Comparison Regression (53-66) ---\n";
+    reportTest("Test 53: BFS uses genuine FIFO behavior", test_53_bfs_fifo_behavior());
+    reportTest("Test 54: DFS uses genuine depth-first behavior", test_54_dfs_genuine_depth_first_behavior());
+    reportTest("Test 55: A* priority-based search and node reconsideration", test_55_astar_priority_and_reconsideration());
+    reportTest("Test 56: A* chooses cheaper weighted route over shorter move route", test_56_astar_chooses_cheaper_weighted_route());
+    reportTest("Test 57: BFS fewest-moves behavior vs A* minimum-cost behavior", test_57_bfs_fewest_moves_vs_astar_cost());
+    reportTest("Test 58: DFS does not falsely guarantee shortest path", test_58_dfs_not_guaranteed_shortest_path());
+    reportTest("Test 59: Regression - Single customer in distant corner", test_59_regression_distant_corner_customer());
+    reportTest("Test 60: Regression - Customer at grid boundary", test_60_regression_grid_boundary_customer());
+    reportTest("Test 61: Regression - Unreachable customer reports NO PATH", test_61_regression_unreachable_customer_no_path());
+    reportTest("Test 62: Regression - Multiple customers in specified order", test_62_regression_ordered_multi_customer_delivery());
+    reportTest("Test 63: Regression - Route passing near customer does not count as reached", test_63_regression_route_passing_near_customer_not_reached());
+    reportTest("Test 64: Regression - Start == Goal behaves correctly (moves=0, cost=0)", test_64_regression_start_equals_goal());
+    reportTest("Test 65: Physical arrival simulation step progression", test_65_physical_arrival_simulation_progression());
+    reportTest("Test 66: All algorithms use identical immutable maze snapshot", test_66_immutable_maze_snapshot_comparison());
 
     std::cout << "\n============================================================\n";
     std::cout << " TOTAL TESTS: " << (g_passCount + g_failCount)

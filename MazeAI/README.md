@@ -114,8 +114,11 @@ SmartRouteAI.exe
 | `1` | Select BFS (Fewest Moves) |
 | `2` | Select DFS (Depth-First) |
 | `3` | Select A* (Lowest Weighted Cost) |
-| `C` | Open full-screen Comparison Dashboard |
-| `A` | Animate delivery van route |
+| `R` | Run selected algorithm |
+| `A` | Run all 3 algorithms independently |
+| `O` | Toggle visual path overlay comparison mode |
+| `V` | Animate delivery van route |
+| `C` | Open full-screen Comparison Dashboard table |
 | `SPACE` | Pause / Resume search or animation |
 | `N` | Step one search node or advance |
 | `L` | Open Map Entity Legend |
@@ -124,9 +127,9 @@ SmartRouteAI.exe
 
 ---
 
-## 5. Automated Test Suite (52 Tests)
+## 5. Automated Test Suite (66 Tests)
 
-A complete standalone headless test suite tests core algorithms, metrics, and multi-customer features without requiring a GUI window.
+A complete standalone headless test suite tests core algorithms, metrics, multi-customer features, and regression suites without requiring a GUI window.
 
 Run the test suite:
 ```cmd
@@ -140,8 +143,23 @@ run_tests.bat
 - **Part 4: Multi-Customer Management (Tests 31–39):** Customer additions, unique ID generation, Store overlap rejection, customer overlap rejection, wall rejection, safe removal, stable customer IDs after deletion, 10-customer limit, movement validation, and stop reordering.
 - **Part 5: Multi-Stop Routing & Metrics (Tests 40–47):** Single customer and multi-stop sequential routing, shared endpoint deduplication, move summing across legs, total cost accumulation, leg-level A\* optimality vs Dijkstra, BFS fewest-move behavior, and unreachable customer reporting.
 - **Part 6: Integration, Restrictions & Window Resize (Tests 48–52):** Pellet restrictions on customers, clear preservation, comparison dashboard consistency, and window-resize coordinate mapping.
+- **Part 7: Routing Correctness & Algorithm Comparison Regression (Tests 53–66):**
+  - **Test 53:** BFS genuine FIFO behavior
+  - **Test 54:** DFS genuine depth-first stack behavior with deterministic neighbor ordering
+  - **Test 55:** A\* priority queue ordering and node reconsideration when cheaper path found
+  - **Test 56:** A\* chooses cheaper weighted route over fewer moves
+  - **Test 57:** BFS chooses fewer moves despite higher weighted cost
+  - **Test 58:** DFS does not falsely guarantee shortest path
+  - **Test 59:** Distant corner customer reachability
+  - **Test 60:** Grid boundary customer reachability
+  - **Test 61:** Unreachable customer reporting `NO PATH` without false completion
+  - **Test 62:** Ordered multi-customer delivery preserving sequence
+  - **Test 63:** Route passing near customer does not count as reached until entering cell
+  - **Test 64:** Start == Goal zero-step handling
+  - **Test 65:** Physical arrival simulation step progression
+  - **Test 66:** Immutable maze snapshot fair comparison across all 3 algorithms
 
-**Results:** `TOTAL TESTS: 52 | PASSED: 52 | FAILED: 0 (100% PASS)`
+**Results:** `TOTAL TESTS: 66 | PASSED: 66 | FAILED: 0 (100% PASS)`
 
 ---
 

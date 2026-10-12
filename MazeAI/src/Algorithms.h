@@ -46,6 +46,7 @@ public:
 
     void initialize(Maze& maze, Position start, Position goal) override {
         pMaze    = &maze;
+        startPos = start;
         goalPos  = goal;
         finished_= found_ = false;
         stats    = SearchStats{};
@@ -112,6 +113,7 @@ public:
 
     void initialize(Maze& maze, Position start, Position goal) override {
         pMaze    = &maze;
+        startPos = start;
         goalPos  = goal;
         finished_= found_ = false;
         stats    = SearchStats{};
@@ -149,7 +151,11 @@ public:
                 return true;
             }
 
-            for (const Position& nb : pMaze->getNeighbors(cur)) {
+            // Neighbor exploration order: TOP, RIGHT, BOTTOM, LEFT.
+            // Push to LIFO stack in reverse (LEFT, BOTTOM, RIGHT, TOP) so TOP is popped first.
+            std::vector<Position> nbs = pMaze->getNeighbors(cur);
+            for (int i = (int)nbs.size() - 1; i >= 0; --i) {
+                const Position& nb = nbs[i];
                 if (!visited.count(nb)) {
                     stk.push(DFSNode(cur, nb));
                     if (!pMaze->at(nb).explored)
@@ -186,6 +192,7 @@ public:
 
     void initialize(Maze& maze, Position start, Position goal) override {
         pMaze    = &maze;
+        startPos = start;
         goalPos  = goal;
         finished_= found_ = false;
         stats    = SearchStats{};
@@ -263,6 +270,7 @@ public:
 
     void initialize(Maze& maze, Position start, Position goal) override {
         pMaze    = &maze;
+        startPos = start;
         goalPos  = goal;
         finished_= found_ = false;
         stats    = SearchStats{};
@@ -342,6 +350,7 @@ public:
 
     void initialize(Maze& maze, Position start, Position goal) override {
         pMaze    = &maze;
+        startPos = start;
         goalPos  = goal;
         finished_= found_ = false;
         stats    = SearchStats{};
@@ -386,12 +395,12 @@ public:
         }
 
         for (const Position& nb : pMaze->getNeighbors(cur)) {
-            if (closed.count(nb)) continue;
             float edge = std::max(0.1f, pMaze->at(nb).traversalCost());
             float ng   = g + edge;
             if (!gScore.count(nb) || ng < gScore[nb]) {
                 gScore[nb] = ng;
                 parent[nb] = cur;
+                closed.erase(nb); // Reconsider node if a better path to it is found
                 float nf = ng + h(nb);
                 PQNode nn; nn.f = nf; nn.g = ng; nn.pos = nb;
                 pq.push(nn);
