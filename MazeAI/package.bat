@@ -21,6 +21,7 @@ copy /Y "%SRC_DIR%\build_and_run.bat" "%STAGING%\"
 copy /Y "%SRC_DIR%\freeglut.dll" "%STAGING%\"
 copy /Y "%SRC_DIR%\SmartRouteAI.exe" "%STAGING%\"
 copy /Y "%SRC_DIR%\README.md" "%STAGING%\"
+copy /Y "%SRC_DIR%\SMARTROUTE_AI_UNIVERSAL_TROUBLESHOOTING.txt" "%STAGING%\"
 
 if exist "%ZIP_FILE%" del /f /q "%ZIP_FILE%"
 

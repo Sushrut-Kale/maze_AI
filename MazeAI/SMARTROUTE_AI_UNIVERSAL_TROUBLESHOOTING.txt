@@ -1,0 +1,375 @@
+================================================================================
+ SMARTROUTE AI — UNIVERSAL TROUBLESHOOTING CHEAT SHEET
+ Intelligent Last-Mile Delivery Optimizer (C++ / OpenGL / FreeGLUT / MinGW)
+ Repository: https://github.com/Sushrut-Kale/maze_AI
+ Operating Systems: Windows 10 / Windows 11 (64-bit & 32-bit)
+================================================================================
+
+This document is a self-contained, beginner-friendly troubleshooting manual.
+If you received SmartRoute AI from GitHub or a project ZIP, read this guide
+before running or compiling anything. It resolves 99% of common issues.
+
+
+--------------------------------------------------------------------------------
+ TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+ 1. THE MOST IMPORTANT MISTAKE: Batch Scripts vs. PowerShell
+ 2. Quick Start: Universal One-Click Launch Guide
+ 3. Scripts & Files Inventory
+ 4. Master Troubleshooting Table (All Common Errors & Fixes)
+ 5. Windows Security, Defender & Smart App Control Explained
+ 6. Environment Diagnostic Commands (Copy & Paste)
+ 7. Clean First-Run Checklist for Students
+ 8. Standardized Error-Reporting Template
+
+
+================================================================================
+ 1. ERROR 1 — BATCH COMMANDS PASTED DIRECTLY INTO POWERSHELL
+================================================================================
+
+WHAT GOES WRONG:
+A very common mistake is opening a PowerShell window and copying multi-line
+batch file code directly into the terminal, such as:
+
+    @echo off
+    setlocal enabledelayedexpansion
+    call compile.bat
+    if errorlevel 1 ( echo BUILD FAILED )
+
+When you paste this into PowerShell, PowerShell displays red error messages:
+  - "The term 'call' is not recognized as the name of a cmdlet..."
+  - "The term '@echo' is not recognized..."
+  - "Unexpected token 'errorlevel' in expression or statement..."
+  - "The token '&&' is not a valid statement separator..."
+
+WHY THIS HAPPENS:
+Windows provides TWO different command-line environments:
+1. Command Prompt (cmd.exe):
+   The legacy command interpreter that understands batch file commands like
+   `@echo off`, `setlocal`, `call`, `pause`, and `%ERRORLEVEL%`.
+2. PowerShell (powershell.exe / pwsh.exe):
+   A modern, object-oriented shell with its own distinct programming language.
+   PowerShell DOES NOT use batch file syntax!
+
+Batch syntax belongs INSIDE a `.bat` file on disk. It must NEVER be pasted
+line by line into PowerShell.
+
+ALSO AVOID: Typing Markdown code fences!
+In documentation and chat messages, code is often wrapped in markers like:
+    ```bat
+    compile.bat
+    ```
+The triple backticks (```) and language tags (bat, sh, powershell) are visual
+formatting markers. Do NOT type ```bat or ``` into any terminal prompt.
+
+--------------------------------------------------------------------------------
+ THE CORRECT PROCEDURE TO RUN SCRIPTS
+--------------------------------------------------------------------------------
+
+Option A — Using PowerShell (Recommended for Windows 10 & 11):
+  1. Open File Explorer and navigate to your extracted SmartRoute AI folder.
+  2. Hold SHIFT, Right-Click an empty space in the folder, and select:
+     "Open in Terminal" or "Open PowerShell window here".
+  3. Verify you are in the correct folder:
+         Get-Location
+  4. Run the batch scripts using the `.\` prefix (required by PowerShell):
+         .\compile.bat
+         .\run_tests.bat
+  5. If the build succeeds, launch the application:
+         .\SmartRouteAI.exe
+     Or use the one-click build and launch script:
+         .\build_and_run.bat
+
+Option B — Using Classic Command Prompt (cmd.exe):
+  1. Open File Explorer in the extracted project folder.
+  2. Click the File Explorer address bar at the top, type `cmd`, and press ENTER.
+  3. Run the scripts directly without the `.\` prefix:
+         compile.bat
+         run_tests.bat
+  4. Launch the application:
+         SmartRouteAI.exe
+     Or:
+         build_and_run.bat
+
+
+================================================================================
+ 2. QUICK START: UNIVERSAL ONE-CLICK LAUNCH GUIDE
+================================================================================
+
+CRITICAL RULE: EXTRACT THE ENTIRE ZIP FIRST!
+Never double-click or run scripts from INSIDE a `.zip` preview window!
+Windows allows you to browse inside a `.zip` archive as if it were a folder,
+but programs cannot access sibling DLLs (`freeglut.dll`), header files (`GL/`),
+or static libraries (`lib/`) from within a compressed preview.
+
+Always:
+  1. Right-click `SmartRouteAI.zip`.
+  2. Select "Extract All...".
+  3. Choose a normal folder on your hard drive (e.g. `C:\Projects\SmartRouteAI`
+     or `D:\SmartRouteAI`).
+  4. Open the EXTRACTED folder before running any script.
+
+SAFEST ONE-CLICK LAUNCH:
+Double-click:
+    build_and_run.bat
+This script automatically compiles `SmartRouteAI.exe` using your MinGW toolchain
+and immediately launches the desktop window if the compilation succeeds.
+
+
+================================================================================
+ 3. SCRIPTS & FILES INVENTORY
+================================================================================
+
+Below is the verified inventory of files included in the project:
+
+SCRIPT / FILE         PURPOSE & DETAILS
+--------------------  ----------------------------------------------------------
+build_and_run.bat     One-click builder and launcher. Compiles `src/main.cpp`
+                      and automatically starts `SmartRouteAI.exe`.
+compile.bat           Build script. Compiles `src/main.cpp` with MinGW g++,
+                      linking FreeGLUT and OpenGL libraries. Returns code 0.
+run_tests.bat         Automated test runner. Compiles and executes the 52-test
+                      headless test harness (`tests/test_algorithms.cpp`).
+package.bat           Distribution packager. Creates `SmartRouteAI.zip` containing
+                      all source, headers, tests, libraries, and executables.
+SmartRouteAI.exe      Prebuilt native 64-bit Windows OpenGL/FreeGLUT executable.
+freeglut.dll          FreeGLUT runtime dynamic library (required by the .exe).
+README.md             Full technical project manual and academic MSE details.
+SMARTROUTE_AI_...txt  This universal troubleshooting guide.
+src/                  C++ source files (main.cpp, Maze.h, Cell.h, MultiStop.h,
+                      Algorithms.h, SearchAlgorithm.h, Button.h, Generators.h).
+tests/                Automated test suite source (test_algorithms.cpp).
+GL/                   OpenGL & FreeGLUT C/C++ header files (glut.h, etc.).
+lib/                  MinGW import library (libfreeglut.a).
+
+
+================================================================================
+ 4. MASTER TROUBLESHOOTING TABLE
+================================================================================
+
+SYMPTOM 1: 'compile.bat' is not recognized as an internal or external command.
+  Cause:   Your terminal is open in the wrong folder (not where compile.bat lives).
+  Fix:     In Command Prompt, type `cd /d "C:\Full\Path\To\Your\Extracted\Folder"`.
+           In PowerShell, type `Set-Location "C:\Full\Path\To\Your\Extracted\Folder"`.
+           Alternatively, open File Explorer, navigate to the folder, type `cmd`
+           or `powershell` in the address bar, and press ENTER.
+
+SYMPTOM 2: In PowerShell, typing 'compile.bat' gives:
+           "The term 'compile.bat' is not recognized..."
+  Cause:   PowerShell requires explicit path qualification (`.\`) for scripts
+           in the current directory as a security feature.
+  Fix:     Type `.\compile.bat` instead of just `compile.bat`.
+           Likewise, use `.\run_tests.bat` and `.\SmartRouteAI.exe`.
+
+SYMPTOM 3: 'g++' is not recognized as an internal or external command.
+  Cause:   MinGW (GCC for Windows) is either not installed or not added to your
+           system PATH environment variable.
+  Fix:     1. Check if MinGW is installed at `C:\MinGW\bin`, `C:\msys64\mingw64\bin`,
+              or `C:\Program Files\mingw-w64`.
+           2. If installed, add the `bin` directory to your PATH:
+              - Press Win + R, type `sysdm.cpl`, press ENTER.
+              - Click the "Advanced" tab, then "Environment Variables".
+              - Under "User variables" or "System variables", select `Path`,
+                click "Edit", click "New", and add `C:\MinGW\bin` (or your path).
+              - Click OK, restart your terminal, and test with: `g++ --version`.
+           3. If MinGW is not installed, install MinGW-w64 (via MSYS2 or winlibs).
+
+SYMPTOM 4: PowerShell error: "The term 'call' is not recognized..."
+  Cause:   You pasted batch script commands directly into a PowerShell window.
+  Fix:     Do not paste code into the prompt. Run the batch script itself by
+           typing `.\compile.bat` or `.\run_tests.bat`.
+
+SYMPTOM 5: PowerShell error: "The token '&&' is not a valid statement separator..."
+  Cause:   Older versions of Windows PowerShell (5.1) do not support `&&`.
+  Fix:     Run commands on separate lines:
+               .\compile.bat
+               .\run_tests.bat
+           Or use a semicolon in PowerShell:
+               .\compile.bat ; .\run_tests.bat
+
+SYMPTOM 6: User accidentally typed triple backticks (```bat or ```).
+  Cause:   Markdown code formatting was mistaken for a shell command.
+  Fix:     Never type ``` or ```bat. Type only the actual command: `.\compile.bat`.
+
+SYMPTOM 7: Fatal error: GL/glut.h: No such file or directory.
+  Cause:   The `GL/` folder is missing, or the compiler was run outside the
+           project folder without the `-I./GL` or `-I.` include flags.
+  Fix:     1. Ensure the `GL` directory containing `glut.h` exists alongside
+              `compile.bat`.
+           2. Run `compile.bat` directly instead of running custom g++ commands.
+              `compile.bat` automatically passes `-I./src -I.` to g++.
+
+SYMPTOM 8: Linker error: undefined reference to 'glutInit', 'glBegin', etc.
+  Cause:   The linker cannot find `libfreeglut.a`, `opengl32`, or `glu32`.
+  Fix:     1. Ensure the `lib/` folder containing `libfreeglut.a` exists.
+           2. Run `compile.bat`, which includes `-L./lib -lfreeglut -lopengl32 -lglu32`.
+
+SYMPTOM 9: System error on launch: "The code execution cannot proceed because
+           freeglut.dll was not found."
+  Cause:   `freeglut.dll` is not in the same directory as `SmartRouteAI.exe`.
+  Fix:     Ensure `freeglut.dll` is present in the same folder as `SmartRouteAI.exe`.
+           If you extracted `SmartRouteAI.zip`, `freeglut.dll` is already included.
+
+SYMPTOM 10: SmartRouteAI.exe was not generated after running compile.bat.
+  Cause:    Compilation failed due to compiler errors.
+  Fix:      Read the compiler output carefully. Check that g++ version is 6.3 or
+            newer and that all files in `src/` are present and intact.
+
+SYMPTOM 11: The executable opens and closes immediately without showing anything.
+  Cause:    Missing `freeglut.dll` or the application was run from an incompatible
+            headless remote terminal without an interactive Windows display.
+  Fix:      1. Check that `freeglut.dll` is in the folder.
+            2. Run from an interactive desktop environment (local monitor / remote
+               desktop session with GUI support).
+
+SYMPTOM 12: Smart App Control / Windows Defender blocks SmartRouteAI.exe.
+  Cause:    Windows 11 Smart App Control blocks newly compiled or unsigned binaries
+            from unknown publishers.
+  Fix:      See Section 5 below for the complete, safe resolution workflow.
+
+SYMPTOM 13: Project is on drive D: or S: and 'cd' does not change the drive.
+  Cause:    In classic Command Prompt (`cmd.exe`), `cd D:\folder` does not switch
+            the active drive unless the `/d` switch is used.
+  Fix:      Use `cd /d D:\YourFolder` in Command Prompt.
+            In PowerShell, `Set-Location D:\YourFolder` switches drives automatically.
+
+SYMPTOM 14: Automated tests report failures or "Access is denied".
+  Cause:    On Windows, if `test_algorithms.exe` was just run, Windows Defender
+            or another process may briefly hold an open file lock on the binary.
+  Fix:      Wait 2 seconds and rerun `.\run_tests.bat`. If compiling locally is
+            restricted, `run_tests.bat` automatically falls back to standard
+            MinGW execution.
+
+SYMPTOM 15: Application opens with garbled graphics or black screen.
+  Cause:    Missing OpenGL driver support on a virtual machine or generic display
+            driver.
+  Fix:      Update your graphics card driver (Intel, AMD, or NVIDIA). SmartRoute AI
+            requires basic OpenGL 1.1+ support, which is supported by virtually
+            all modern graphics drivers.
+
+
+================================================================================
+ 5. WINDOWS SECURITY, DEFENDER & SMART APP CONTROL EXPLAINED
+================================================================================
+
+UNDERSTANDING SECURITY NOTIFICATIONS:
+It is critical to distinguish between:
+  1. A Reputation Warning (Unverified Publisher / Smart App Control / SmartScreen):
+     Windows displays this when an executable is unsigned or new to Microsoft's
+     cloud reputation database. It DOES NOT mean the file contains malware!
+  2. A Confirmed Malware Detection:
+     An antivirus engine identifies a specific known malicious threat signature.
+
+ABOUT SMART APP CONTROL (Windows 11):
+Windows 11 includes "Smart App Control", an AI-powered security layer designed
+to block executables that lack a valid cryptographic digital signature from a
+globally trusted Certificate Authority.
+
+Because SmartRoute AI is a college academic open-source C++ project, the prebuilt
+executable is built from open-source code and is not signed with an expensive
+commercial code-signing certificate ($300-$500/year). Consequently, Windows 11
+Smart App Control may block the binary from launching directly.
+
+RESPONSIBLE, SAFE RECOMMENDATIONS:
+  - NEVER disable Windows Defender, disable Smart App Control, or turn off your
+    system firewall as a workaround. Doing so compromises your entire computer.
+  - Obtain the project only from the official, verified GitHub repository:
+        https://github.com/Sushrut-Kale/maze_AI
+  - Build the executable from source on your own machine:
+        .\compile.bat
+    When you compile directly on your own machine using your own MinGW compiler,
+    Windows Defender recognizes the build action and typically allows the
+    executable to run without complaint.
+  - If Windows SmartScreen displays "Windows protected your PC":
+    1. Verify that the files match the official GitHub repository.
+    2. Click "More info".
+    3. Verify the application name is `SmartRouteAI.exe`.
+    4. Click "Run anyway" only if you compiled or verified the source yourself.
+  - If a security tool reports a genuine threat signature:
+    STOP and investigate. Do not bypass security warnings blindly.
+
+
+================================================================================
+ 6. ENVIRONMENT DIAGNOSTIC COMMANDS (COPY & PASTE)
+================================================================================
+
+If you encounter an issue and need to diagnose your system, open PowerShell
+in your SmartRoute AI project folder and run these copyable commands:
+
+--- Command 1: Check Current Folder ---
+Get-Location
+  What it checks: Confirms you are in the project folder and not in System32
+                  or your user home root.
+
+--- Command 2: Check Directory Contents ---
+Get-ChildItem
+  What it checks: Lists files. You should see compile.bat, run_tests.bat,
+                  src/, GL/, lib/, freeglut.dll, and README.md.
+
+--- Command 3: Check MinGW Compiler (g++) ---
+where.exe g++
+g++ --version
+  What it checks: Verifies that MinGW GCC is installed, visible on your system
+                  PATH, and reports its version number (e.g. 6.3.0, 11.2.0, 13.x).
+  What to do if missing: Install MinGW-w64 and add its `bin` folder to PATH.
+
+--- Command 4: Check Essential Project Files ---
+Test-Path .\compile.bat
+Test-Path .\run_tests.bat
+Test-Path .\freeglut.dll
+Test-Path .\SmartRouteAI.exe
+  What it checks: Returns "True" if each critical file exists in the current folder.
+  What to do if "False": You may have extracted the ZIP incorrectly or opened
+                         PowerShell in the wrong folder.
+
+
+================================================================================
+ 7. CLEAN FIRST-RUN CHECKLIST FOR STUDENTS
+================================================================================
+
+Follow these 7 steps in exact order:
+
+[ ] STEP 1: Download `SmartRouteAI.zip` from the official repository:
+            https://github.com/Sushrut-Kale/maze_AI
+[ ] STEP 2: Right-click `SmartRouteAI.zip` -> "Extract All..." to a normal folder
+            (e.g., `C:\SmartRouteAI` or `D:\SmartRouteAI`).
+[ ] STEP 3: Open the extracted folder in File Explorer. Confirm you see:
+            `compile.bat`, `run_tests.bat`, `freeglut.dll`, `src/`, `GL/`, `lib/`.
+[ ] STEP 4: Open PowerShell in that folder (Shift + Right-Click -> "Open in Terminal").
+[ ] STEP 5: Verify your compiler:
+            g++ --version
+            (If this fails, add MinGW\bin to your PATH as explained in Section 4).
+[ ] STEP 6: Run the automated test suite:
+            .\run_tests.bat
+            Confirm all 52 tests display [PASS].
+[ ] STEP 7: Build and launch the application:
+            .\build_and_run.bat
+            The OpenGL window will open displaying the dark navy delivery canvas!
+
+
+================================================================================
+ 8. STANDARDIZED ERROR-REPORTING TEMPLATE
+================================================================================
+
+If an issue persists and you need assistance, copy and fill out the template
+below. (IMPORTANT: Do NOT include passwords, personal credentials, or secrets!)
+
+------------------------------ COPY BELOW --------------------------------------
+SmartRoute AI — Error Report
+1. Windows Version: [e.g. Windows 11 Home 23H2 / Windows 10 Pro 22H2]
+2. Project Folder Location: [e.g. C:\Users\student\Projects\SmartRouteAI]
+3. Running from Extracted ZIP? [Yes / No]
+4. Terminal Used: [PowerShell / Command Prompt / Windows Terminal]
+5. Output of 'g++ --version': [e.g. g++ (MinGW.org GCC-6.3.0) or Not recognized]
+6. Exact Command Executed: [e.g. .\compile.bat]
+7. Full Error Message:
+   [Paste complete error output here]
+8. Did '.\run_tests.bat' pass 52/52 tests? [Yes / No / Did not run]
+9. Did Smart App Control or Defender show a popup? [Yes / No / Details]
+10. Does this occur on one machine or multiple computers? [Original / Friend's]
+------------------------------ END TEMPLATE ------------------------------------
+
+
+================================================================================
+ End of Document — SmartRoute AI Universal Troubleshooting Cheat Sheet
+================================================================================

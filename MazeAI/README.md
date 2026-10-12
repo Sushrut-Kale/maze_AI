@@ -152,3 +152,19 @@ To generate the authoritative, portable release package:
 package.bat
 ```
 Produces `SmartRouteAI.zip` containing all C++ sources, test harnesses, build scripts, headers, libraries, and the standalone executable ready for distribution and presentation.
+
+---
+
+## 7. Universal Troubleshooting Guide
+
+For comprehensive troubleshooting of common Windows, MinGW, PowerShell, and Smart App Control issues, see:
+- [`SMARTROUTE_AI_UNIVERSAL_TROUBLESHOOTING.txt`](SMARTROUTE_AI_UNIVERSAL_TROUBLESHOOTING.txt)
+
+Key topics covered:
+- **Error 1:** Why batch commands (`@echo off`, `setlocal`, `call`) must NOT be pasted into PowerShell.
+- **PowerShell vs Command Prompt:** Proper execution (`.\compile.bat` vs `compile.bat`).
+- **Environment Diagnostics:** Copyable commands to verify g++, PATH, and project files.
+- **MinGW & Compiler Setup:** Resolving missing g++ or FreeGLUT header/library issues.
+- **Security Guidance:** Safe, responsible handling of Windows 11 Smart App Control and SmartScreen.
+- **Student Checklist:** Clean 7-step first-run verification for classmates and presentation partners.
+
