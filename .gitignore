@@ -1,0 +1,41 @@
+# ============================================================
+# .gitignore — SmartRoute AI
+# ============================================================
+
+# Compiled test executables (do not push test binaries)
+test_algorithms.exe
+test_algorithms
+
+# Debug / temporary C test stubs
+test.c
+
+# Frame capture directory (generated recording output)
+frames/
+
+# Backup directories & unrelated sub-projects
+MazeAI_backup/
+Project_maze/
+
+# Standalone release ZIPs (distributable archive built locally)
+*.zip
+
+# Verification & packaging staging areas
+zip_staging/
+zip_test/
+zip_verify/
+
+# IDE caches and editor config
+.vscode/
+.vs/
+*.suo
+*.user
+*.cache
+__pycache__/
+*.pyc
+
+# Windows Explorer files
+Thumbs.db
+Desktop.ini
+
+# Logs and diagnostic output
+*.log

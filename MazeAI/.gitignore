@@ -1,0 +1,27 @@
+# ============================================================
+# .gitignore — SmartRoute AI (Project Root)
+# ============================================================
+
+# Generated executables — rebuild from source with compile.bat
+test_algorithms.exe
+test_algorithms
+
+# Frame capture output (recording only — not needed for distribution)
+frames/
+
+# Packaging staging area
+zip_staging/
+zip_test/
+
+# IDE caches
+.vscode/
+.vs/
+*.suo
+*.user
+
+# Windows Explorer
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
