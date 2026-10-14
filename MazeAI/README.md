@@ -127,9 +127,9 @@ SmartRouteAI.exe
 
 ---
 
-## 5. Automated Test Suite (66 Tests)
+## 5. Automated Test Suite (81 Tests)
 
-A complete standalone headless test suite tests core algorithms, metrics, multi-customer features, and regression suites without requiring a GUI window.
+A complete standalone headless test suite tests core algorithms, metrics, multi-customer features, high-resolution benchmarking, and regression suites without requiring a GUI window.
 
 Run the test suite:
 ```cmd
@@ -158,12 +158,58 @@ run_tests.bat
   - **Test 64:** Start == Goal zero-step handling
   - **Test 65:** Physical arrival simulation step progression
   - **Test 66:** Immutable maze snapshot fair comparison across all 3 algorithms
+- **Part 8: Performance Measurement & Dashboard Regression (Tests 67–81):**
+  - **Test 67:** High-resolution timing records nonnegative durations using `std::chrono::steady_clock`
+  - **Test 68:** Repeated benchmark executions reset algorithm and maze state cleanly between runs
+  - **Test 69:** Benchmark search timing excludes GUI animation, van progression, and rendering
+  - **Test 70:** Metrics and timing structures are strictly independent across BFS, DFS, and A*
+  - **Test 71:** Route moves accurately match the reconstructed path transitions
+  - **Test 72:** Weighted route cost matches terrain traversal costs of entered cells
+  - **Test 73:** Failed searches do not participate in route-quality winner determinations
+  - **Test 74:** Equal move counts produce a clearly reported tie
+  - **Test 75:** Equal weighted costs produce a clearly reported tie
+  - **Test 76:** Fewest-node label follows actual expanded node counts (never hardcoded to A*)
+  - **Test 77:** Microsecond timing values format without misleading integer truncation or `0.00 ms`
+  - **Test 78:** Search results and benchmark metrics are invalidated upon map/terrain modification
+  - **Test 79:** Multi-stop metrics deduplicate shared endpoints and avoid double-counting moves
+  - **Test 80:** Delivery completion remains strictly tied to physical vehicle arrival at destination
+  - **Test 81:** Dashboard winner evaluation dynamically evaluates winners without hardcoded bias
 
-**Results:** `TOTAL TESTS: 66 | PASSED: 66 | FAILED: 0 (100% PASS)`
+**Results:** `TOTAL TESTS: 81 | PASSED: 81 | FAILED: 0 (100% PASS)`
 
 ---
 
-## 6. Standalone Packaging
+## 6. Performance Measurement & Benchmark Methodology
+
+### Root Cause of the 0.00 ms Display
+On modern multi-core processors running optimized native C++ binaries (`-O2`), pathfinding on grid sizes from 15×15 to 25×25 typically executes in 15 to 150 microseconds (0.015 to 0.150 ms). The original code used coarse millisecond formatting (`std::fixed << std::setprecision(2)`), which rounded any duration under 0.005 ms down to `0.00 ms`. Furthermore, a single pass was susceptible to cold instruction caches and OS thread scheduling jitter.
+
+### High-Resolution Benchmark Architecture
+1. **Monotonic High-Resolution Clock:** Uses C++ `<chrono>` with `std::chrono::steady_clock` to record durations with nanosecond-level clock stability.
+2. **Repeated Statistical Benchmarking:** Executes a configurable suite of 25 repeated independent runs over identical, immutable maze snapshots.
+3. **Warm-Up Passes:** Performs 3 initial warm-up passes to prime CPU instruction caches, heap allocations, and branch predictors.
+4. **Clean State Isolation:** Every repetition creates a fresh algorithm instance and freshly reset maze copy, strictly measuring pure algorithm search execution. Van animation, user input, OpenGL rendering, and file I/O are never measured.
+5. **Statistical Metrics:** Calculates and reports the **median duration** (robust against outliers) and **mean duration**, alongside the single interactive run time.
+6. **Bounded Execution:** Benchmark loops include a 50 ms safety threshold so the UI never experiences lag or frame drops even on large mazes.
+7. **Adaptive Units & Precision:**
+   - $\ge 1.0 \text{ ms}$: Formatted with 3 decimal places in milliseconds (e.g., `12.456 ms`).
+   - $< 1.0 \text{ ms}$: Displayed with both microsecond and millisecond units (e.g., `123 µs (0.123 ms)`, `845 µs (0.845 ms)`).
+   - Below measurement resolution: Reported as `Below measurement resolution` or `< 1 µs`, never fabricating fake nonzero numbers.
+
+---
+
+## 7. Comparative Metrics & Winner Determination
+
+The comparison dashboard computes winner labels dynamically from valid, current results:
+- **Fewest Route Moves:** Evaluates successful routes only. Indicates ties (e.g., `BFS, A* (tie)`) when multiple algorithms find equal shortest hop paths.
+- **Lowest Weighted Cost:** Evaluates successful routes only. Accurately highlights the algorithm with minimum fuel/transit expense. A\* guarantees optimality with admissible heuristics; BFS and DFS may tie on uniform road segments.
+- **Fewest Expanded Nodes:** Compares actual state space explored. If DFS stumbles onto the goal quickly exploring fewer nodes than A*, DFS is honestly awarded the title for that run.
+- **Fastest Median Search:** Compares benchmarked median execution times. Uses a 2 µs / 5% tolerance band to report ties when algorithms are statistically equivalent, or reports inconclusive if below platform resolution.
+- **Equal Quality Explanations:** When all three algorithms find equal move counts and costs on simple corridors, the dashboard explains that different search strategies can converge on identical-cost routes while exploring different numbers of states.
+
+---
+
+## 8. Standalone Packaging
 
 To generate the authoritative, portable release package:
 ```cmd
@@ -173,11 +219,10 @@ Produces `SmartRouteAI.zip` containing all C++ sources, test harnesses, build sc
 
 ---
 
-## 7. Universal Troubleshooting Guide
+## 9. Universal Troubleshooting Guide
 
 For comprehensive troubleshooting of common Windows, MinGW, PowerShell, and Smart App Control issues, see:
 - [`SMARTROUTE_AI_UNIVERSAL_TROUBLESHOOTING.txt`](SMARTROUTE_AI_UNIVERSAL_TROUBLESHOOTING.txt)
-
 Key topics covered:
 - **Error 1:** Why batch commands (`@echo off`, `setlocal`, `call`) must NOT be pasted into PowerShell.
 - **PowerShell vs Command Prompt:** Proper execution (`.\compile.bat` vs `compile.bat`).

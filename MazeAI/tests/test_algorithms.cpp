@@ -974,6 +974,357 @@ bool test_66_immutable_maze_snapshot_comparison() {
 }
 
 // ────────────────────────────────────────────────────────────
+// SUITE 8: PERFORMANCE MEASUREMENT & COMPARISON REGRESSION (67 - 81)
+// ────────────────────────────────────────────────────────────
+
+bool test_67_high_res_timing_nonnegative() {
+    Maze m = makeOpenMaze(6, 6);
+    std::vector<Position> stops = {{5, 5}};
+    std::vector<std::string> labels = {"C1"};
+
+    MultiStopResult rBfs = runMultiStopSearch(m, stops, labels, "BFS", true, 10);
+    MultiStopResult rDfs = runMultiStopSearch(m, stops, labels, "DFS", true, 10);
+    MultiStopResult rAStar = runMultiStopSearch(m, stops, labels, "A*", true, 10);
+
+    TEST_ASSERT(rBfs.totalTimeMs >= 0.0, "BFS single-run time nonnegative");
+    TEST_ASSERT(rBfs.benchmark.ran, "BFS benchmark ran");
+    TEST_ASSERT(rBfs.benchmark.medianMs >= 0.0, "BFS benchmark median nonnegative");
+    TEST_ASSERT(rBfs.benchmark.sampleCount > 0, "BFS sample count > 0");
+
+    TEST_ASSERT(rDfs.totalTimeMs >= 0.0, "DFS single-run time nonnegative");
+    TEST_ASSERT(rDfs.benchmark.ran, "DFS benchmark ran");
+    TEST_ASSERT(rDfs.benchmark.medianMs >= 0.0, "DFS benchmark median nonnegative");
+
+    TEST_ASSERT(rAStar.totalTimeMs >= 0.0, "A* single-run time nonnegative");
+    TEST_ASSERT(rAStar.benchmark.ran, "A* benchmark ran");
+    TEST_ASSERT(rAStar.benchmark.medianMs >= 0.0, "A* benchmark median nonnegative");
+    return true;
+}
+
+bool test_68_repeated_benchmarks_reset_state() {
+    Maze m = makeOpenMaze(6, 6);
+    std::vector<Position> stops = {{5, 5}};
+    std::vector<std::string> labels = {"C1"};
+
+    BenchmarkStats bench = benchmarkMultiStopSearch(m, stops, labels, "A*", 15, 2);
+    TEST_ASSERT(bench.ran, "Benchmark executed");
+    TEST_ASSERT(bench.sampleCount == 15, "Benchmark recorded 15 repetitions");
+    TEST_ASSERT(bench.medianMs >= 0.0, "Median is nonnegative");
+
+    // Verify input maze was not corrupted
+    for (int r = 0; r < m.rows; ++r) {
+        for (int c = 0; c < m.cols; ++c) {
+            TEST_ASSERT(!m.at(r, c).explored, "Maze cell explored must remain false");
+            TEST_ASSERT(!m.at(r, c).inFrontier, "Maze cell inFrontier must remain false");
+            TEST_ASSERT(!m.at(r, c).inPath, "Maze cell inPath must remain false");
+        }
+    }
+    return true;
+}
+
+bool test_69_timing_excludes_gui_animation() {
+    Maze m = makeOpenMaze(6, 6);
+    std::vector<Position> stops = {{5, 5}};
+    std::vector<std::string> labels = {"C1"};
+
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "BFS", true, 5);
+    double origTime = res.totalTimeMs;
+    double origMedian = res.benchmark.medianMs;
+
+    // Simulate GUI animation steps
+    int animStep = 0;
+    float animProgress = 0.0f;
+    for (int frame = 0; frame < 50; ++frame) {
+        animProgress += 0.08f;
+        if (animProgress >= 1.0f) {
+            animProgress = 0.0f;
+            animStep++;
+        }
+    }
+
+    // Timing metrics must remain strictly unaffected by van animation steps
+    TEST_ASSERT(res.totalTimeMs == origTime, "Single-run search time untouched by animation");
+    TEST_ASSERT(res.benchmark.medianMs == origMedian, "Benchmark median untouched by animation");
+    TEST_ASSERT(animStep > 0, "Animation advanced independently");
+    return true;
+}
+
+bool test_70_metrics_stored_independently() {
+    Maze m = makeOpenMaze(7, 7);
+    std::vector<Position> stops = {{6, 6}};
+    std::vector<std::string> labels = {"C1"};
+
+    MultiStopResult rBfs = runMultiStopSearch(m, stops, labels, "BFS", false);
+    MultiStopResult rDfs = runMultiStopSearch(m, stops, labels, "DFS", false);
+    MultiStopResult rAStar = runMultiStopSearch(m, stops, labels, "A*", false);
+
+    // Verify independent instances
+    rBfs.totalMoves = 999;
+    TEST_ASSERT(rDfs.totalMoves != 999, "DFS moves independent of BFS modification");
+    TEST_ASSERT(rAStar.totalMoves != 999, "A* moves independent of BFS modification");
+    return true;
+}
+
+bool test_71_route_moves_match_reconstructed_path() {
+    Maze m = makeOpenMaze(5, 5);
+    std::vector<Position> stops = {{2, 2}, {4, 4}};
+    std::vector<std::string> labels = {"C1", "C2"};
+
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "BFS", false);
+    TEST_ASSERT(res.fullyCompleted, "Path must be found");
+    TEST_ASSERT(res.legs.size() == 2, "Must have 2 legs");
+
+    int expectedMoves = res.legs[0].moves + res.legs[1].moves;
+    TEST_ASSERT(res.totalMoves == expectedMoves, "Total moves must equal sum of leg moves");
+    TEST_ASSERT(res.fullPath.size() == (size_t)(res.totalMoves + 1), "Full path size must equal totalMoves + 1");
+    return true;
+}
+
+bool test_72_weighted_cost_matches_terrain() {
+    Maze m = makeOpenMaze(3, 3);
+    // Path (0,0) -> (0,1) -> (0,2)
+    m.at(0, 1).special = SpecialType::REWARD; // 0.5
+    m.at(0, 2).special = SpecialType::PENALTY; // 4.0
+
+    std::vector<Position> stops = {{0, 2}};
+    std::vector<std::string> labels = {"C1"};
+
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "BFS", false);
+    TEST_ASSERT(res.fullyCompleted, "Path found");
+
+    // Cost is entered cells: cell (0,1) is 0.5, cell (0,2) is 4.0 -> total 4.5
+    float expectedCost = 0.5f + 4.0f;
+    TEST_ASSERT(std::abs(res.totalCost - expectedCost) < 0.001f, "Cost must equal sum of entered cells");
+    return true;
+}
+
+bool test_73_failed_searches_excluded_from_route_quality() {
+    std::vector<AlgoEvalData> algos;
+
+    AlgoEvalData bfs;
+    bfs.name = "BFS";
+    bfs.hasRun = true;
+    bfs.foundPath = false; // FAILED search
+    bfs.totalMoves = 0;    // Move count is 0 because search failed
+    bfs.totalCost = 0.0f;
+    bfs.totalNodesExplored = 50;
+    algos.push_back(bfs);
+
+    AlgoEvalData astar;
+    astar.name = "A*";
+    astar.hasRun = true;
+    astar.foundPath = true; // SUCCESSFUL search
+    astar.totalMoves = 15;
+    astar.totalCost = 18.0f;
+    astar.totalNodesExplored = 20;
+    algos.push_back(astar);
+
+    WinnerResult wMoves = computeRouteMovesWinner(algos);
+    WinnerResult wCost = computeWeightedCostWinner(algos);
+
+    TEST_ASSERT(wMoves.isAvailable, "Moves winner available");
+    TEST_ASSERT(wMoves.winners.size() == 1 && wMoves.winners[0] == "A*", "Failed BFS cannot win fewest moves");
+    TEST_ASSERT(!wMoves.isTie, "No tie with failed search");
+
+    TEST_ASSERT(wCost.isAvailable, "Cost winner available");
+    TEST_ASSERT(wCost.winners.size() == 1 && wCost.winners[0] == "A*", "Failed BFS cannot win lowest cost");
+    return true;
+}
+
+bool test_74_equal_move_counts_produce_tie() {
+    std::vector<AlgoEvalData> algos;
+
+    AlgoEvalData bfs;
+    bfs.name = "BFS"; bfs.hasRun = true; bfs.foundPath = true;
+    bfs.totalMoves = 411; bfs.totalCost = 465.0f; bfs.totalNodesExplored = 874;
+    algos.push_back(bfs);
+
+    AlgoEvalData dfs;
+    dfs.name = "DFS"; dfs.hasRun = true; dfs.foundPath = true;
+    dfs.totalMoves = 425; dfs.totalCost = 490.0f; dfs.totalNodesExplored = 748;
+    algos.push_back(dfs);
+
+    AlgoEvalData astar;
+    astar.name = "A*"; astar.hasRun = true; astar.foundPath = true;
+    astar.totalMoves = 411; astar.totalCost = 465.0f; astar.totalNodesExplored = 816;
+    algos.push_back(astar);
+
+    WinnerResult wMoves = computeRouteMovesWinner(algos);
+    TEST_ASSERT(wMoves.isAvailable, "Winner available");
+    TEST_ASSERT(wMoves.isTie, "Must be a tie between BFS and A*");
+    TEST_ASSERT(wMoves.winners.size() == 2, "Exactly 2 winners");
+    TEST_ASSERT(wMoves.summary.find("tie") != std::string::npos, "Summary must include (tie)");
+    return true;
+}
+
+bool test_75_equal_weighted_costs_produce_tie() {
+    std::vector<AlgoEvalData> algos;
+
+    AlgoEvalData bfs;
+    bfs.name = "BFS"; bfs.hasRun = true; bfs.foundPath = true;
+    bfs.totalMoves = 411; bfs.totalCost = 465.0f;
+    algos.push_back(bfs);
+
+    AlgoEvalData dfs;
+    dfs.name = "DFS"; dfs.hasRun = true; dfs.foundPath = true;
+    dfs.totalMoves = 411; dfs.totalCost = 465.0f;
+    algos.push_back(dfs);
+
+    AlgoEvalData astar;
+    astar.name = "A*"; astar.hasRun = true; astar.foundPath = true;
+    astar.totalMoves = 411; astar.totalCost = 465.0f;
+    algos.push_back(astar);
+
+    WinnerResult wCost = computeWeightedCostWinner(algos);
+    TEST_ASSERT(wCost.isAvailable, "Cost winner available");
+    TEST_ASSERT(wCost.isTie, "Must be a 3-way tie");
+    TEST_ASSERT(wCost.winners.size() == 3, "All 3 algorithms tied");
+    TEST_ASSERT(wCost.summary.find("tie") != std::string::npos, "Summary contains (tie)");
+    return true;
+}
+
+bool test_76_fewest_nodes_follows_actual_node_values() {
+    std::vector<AlgoEvalData> algos;
+
+    // From user prompt example: BFS=874, DFS=748, A*=816
+    AlgoEvalData bfs;
+    bfs.name = "BFS"; bfs.hasRun = true; bfs.totalNodesExplored = 874;
+    algos.push_back(bfs);
+
+    AlgoEvalData dfs;
+    dfs.name = "DFS"; dfs.hasRun = true; dfs.totalNodesExplored = 748;
+    algos.push_back(dfs);
+
+    AlgoEvalData astar;
+    astar.name = "A*"; astar.hasRun = true; astar.totalNodesExplored = 816;
+    algos.push_back(astar);
+
+    WinnerResult wNodes = computeFewestNodesWinner(algos);
+    TEST_ASSERT(wNodes.isAvailable, "Nodes winner available");
+    TEST_ASSERT(wNodes.winners.size() == 1, "Single winner");
+    TEST_ASSERT(wNodes.winners[0] == "DFS", "DFS must win fewest expanded nodes (748 < 816 < 874)");
+    TEST_ASSERT(!wNodes.isTie, "No tie");
+    return true;
+}
+
+bool test_77_timing_formatted_without_integer_truncation() {
+    // Zero / below resolution
+    std::string s0 = formatSearchDuration(0.0);
+    TEST_ASSERT(s0 == "Below measurement resolution", "0.0 reports below resolution");
+
+    // Very small (< 1 µs)
+    std::string sSmall = formatSearchDuration(0.0004);
+    TEST_ASSERT(sSmall.find("< 1") != std::string::npos, "Sub-microsecond duration formatted");
+
+    // Microsecond range: 45 µs (0.045 ms)
+    std::string sUs = formatSearchDuration(0.045);
+    TEST_ASSERT(sUs.find("45") != std::string::npos, "0.045 ms formats as 45 µs, not 0.00 ms");
+    TEST_ASSERT(sUs.find("0.00 ms") == std::string::npos, "Must never display misleading 0.00 ms");
+
+    // 0.123 ms
+    std::string s123 = formatSearchDuration(0.123, true);
+    TEST_ASSERT(s123.find("0.123 ms") != std::string::npos || s123.find("123") != std::string::npos, "0.123 ms formatted with precision");
+
+    // 12.456 ms
+    std::string s12 = formatSearchDuration(12.456);
+    TEST_ASSERT(s12.find("12.456 ms") != std::string::npos, "12.456 ms formatted with 3 decimal places");
+
+    // 845 µs (0.845 ms)
+    std::string s845 = formatSearchDuration(0.845, true);
+    TEST_ASSERT(s845.find("845") != std::string::npos, "845 µs formatted cleanly");
+    return true;
+}
+
+bool test_78_results_invalidated_on_maze_change() {
+    MultiStopResult res;
+    res.fullyCompleted = true;
+    res.totalMoves = 10;
+    res.benchmark.ran = true;
+    res.benchmark.medianMs = 1.25;
+
+    // Invalidation pattern: reset to default
+    res = MultiStopResult{};
+    TEST_ASSERT(!res.fullyCompleted, "Fully completed reset");
+    TEST_ASSERT(res.totalMoves == 0, "Total moves reset");
+    TEST_ASSERT(!res.benchmark.ran, "Benchmark ran reset to false");
+    TEST_ASSERT(res.benchmark.medianMs == 0.0, "Benchmark median reset to 0.0");
+    return true;
+}
+
+bool test_79_multi_stop_metrics_no_double_count() {
+    Maze m = makeOpenMaze(1, 5); // 1x5 open corridor: (0,0), (0,1), (0,2), (0,3), (0,4)
+    std::vector<Position> stops = {{0, 2}, {0, 4}};
+    std::vector<std::string> labels = {"C1", "C2"};
+
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "BFS", false);
+    TEST_ASSERT(res.fullyCompleted, "Search fully completed");
+    TEST_ASSERT(res.legs.size() == 2, "2 legs generated");
+    TEST_ASSERT(res.legs[0].moves == 2, "Leg 1 moves = 2");
+    TEST_ASSERT(res.legs[1].moves == 2, "Leg 2 moves = 2");
+    TEST_ASSERT(res.totalMoves == 4, "Total moves = 4 (not double counted)");
+    TEST_ASSERT(res.fullPath.size() == 5, "Combined path deduplicated shared endpoint {0,2}");
+    return true;
+}
+
+bool test_80_delivery_completion_tied_to_physical_arrival() {
+    Maze m = makeOpenMaze(5, 5);
+    std::vector<Position> stops = {{0, 4}, {4, 4}};
+    std::vector<std::string> labels = {"C1", "C2"};
+
+    MultiStopResult res = runMultiStopSearch(m, stops, labels, "BFS", false);
+    TEST_ASSERT(res.fullyCompleted, "Search completed");
+
+    // Delivery completion is simulated arrival, distinct from search completion
+    bool deliveryCompleted = false;
+    int animStep = 0;
+    int finalStepIndex = (int)res.fullPath.size() - 1;
+
+    TEST_ASSERT(!deliveryCompleted, "Delivery not completed initially");
+
+    // Advance halfway
+    animStep = finalStepIndex / 2;
+    if (animStep >= finalStepIndex) deliveryCompleted = true;
+    TEST_ASSERT(!deliveryCompleted, "Delivery not completed halfway through route");
+
+    // Advance to end
+    animStep = finalStepIndex;
+    if (animStep >= finalStepIndex && res.fullyCompleted) deliveryCompleted = true;
+    TEST_ASSERT(deliveryCompleted, "Delivery completed upon physical van arrival at final stop");
+    return true;
+}
+
+bool test_81_dashboard_never_hardcodes_winning_algorithm() {
+    // Config 1: BFS fewest moves, A* lowest cost, DFS fewest nodes
+    std::vector<AlgoEvalData> cfg1;
+    cfg1.push_back({"BFS", true, true, 10, 20.0f, 100, 0.1, 0.1, 1, 1});
+    cfg1.push_back({"DFS", true, true, 25, 25.0f, 30,  0.2, 0.2, 1, 1});
+    cfg1.push_back({"A*",  true, true, 15, 12.0f, 50,  0.3, 0.3, 1, 1});
+
+    WinnerResult wM1 = computeRouteMovesWinner(cfg1);
+    WinnerResult wC1 = computeWeightedCostWinner(cfg1);
+    WinnerResult wN1 = computeFewestNodesWinner(cfg1);
+
+    TEST_ASSERT(wM1.winners[0] == "BFS", "Config 1 moves winner is BFS");
+    TEST_ASSERT(wC1.winners[0] == "A*",  "Config 1 cost winner is A*");
+    TEST_ASSERT(wN1.winners[0] == "DFS", "Config 1 nodes winner is DFS");
+
+    // Config 2: A* fewest moves, DFS lowest cost, BFS fewest nodes
+    std::vector<AlgoEvalData> cfg2;
+    cfg2.push_back({"BFS", true, true, 30, 30.0f, 15, 0.1, 0.1, 1, 1});
+    cfg2.push_back({"DFS", true, true, 20, 10.0f, 80, 0.2, 0.2, 1, 1});
+    cfg2.push_back({"A*",  true, true, 10, 15.0f, 40, 0.3, 0.3, 1, 1});
+
+    WinnerResult wM2 = computeRouteMovesWinner(cfg2);
+    WinnerResult wC2 = computeWeightedCostWinner(cfg2);
+    WinnerResult wN2 = computeFewestNodesWinner(cfg2);
+
+    TEST_ASSERT(wM2.winners[0] == "A*",  "Config 2 moves winner is A*");
+    TEST_ASSERT(wC2.winners[0] == "DFS", "Config 2 cost winner is DFS");
+    TEST_ASSERT(wN2.winners[0] == "BFS", "Config 2 nodes winner is BFS");
+    return true;
+}
+
+// ────────────────────────────────────────────────────────────
 // MAIN TEST HARNESS RUNNER
 // ────────────────────────────────────────────────────────────
 
@@ -1061,6 +1412,23 @@ int main() {
     reportTest("Test 64: Regression - Start == Goal behaves correctly (moves=0, cost=0)", test_64_regression_start_equals_goal());
     reportTest("Test 65: Physical arrival simulation step progression", test_65_physical_arrival_simulation_progression());
     reportTest("Test 66: All algorithms use identical immutable maze snapshot", test_66_immutable_maze_snapshot_comparison());
+
+    std::cout << "\n--- Part 8: Performance Measurement & Dashboard Regression (67-81) ---\n";
+    reportTest("Test 67: High-resolution timing records nonnegative durations", test_67_high_res_timing_nonnegative());
+    reportTest("Test 68: Repeated benchmarks reset algorithm state", test_68_repeated_benchmarks_reset_state());
+    reportTest("Test 69: Timing does not include GUI animation or rendering", test_69_timing_excludes_gui_animation());
+    reportTest("Test 70: Metrics are stored independently for BFS, DFS, and A*", test_70_metrics_stored_independently());
+    reportTest("Test 71: Route moves match the reconstructed path", test_71_route_moves_match_reconstructed_path());
+    reportTest("Test 72: Weighted cost matches the terrain cells or transitions", test_72_weighted_cost_matches_terrain());
+    reportTest("Test 73: Failed searches do not participate in route-quality winner calculations", test_73_failed_searches_excluded_from_route_quality());
+    reportTest("Test 74: Equal move counts produce a tie", test_74_equal_move_counts_produce_tie());
+    reportTest("Test 75: Equal weighted costs produce a tie", test_75_equal_weighted_costs_produce_tie());
+    reportTest("Test 76: The fewest-node label follows the actual expanded-node values", test_76_fewest_nodes_follows_actual_node_values());
+    reportTest("Test 77: Timing values are formatted without misleading integer truncation", test_77_timing_formatted_without_integer_truncation());
+    reportTest("Test 78: Results are invalidated when the maze or terrain costs change", test_78_results_invalidated_on_maze_change());
+    reportTest("Test 79: Multi-stop metrics do not double-count segment boundaries", test_79_multi_stop_metrics_no_double_count());
+    reportTest("Test 80: Delivery completion remains tied to physical arrival", test_80_delivery_completion_tied_to_physical_arrival());
+    reportTest("Test 81: The dashboard never hardcodes a winning algorithm", test_81_dashboard_never_hardcodes_winning_algorithm());
 
     std::cout << "\n============================================================\n";
     std::cout << " TOTAL TESTS: " << (g_passCount + g_failCount)

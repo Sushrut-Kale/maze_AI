@@ -61,8 +61,15 @@ inline void drawSep(float x, float y, float w,
 inline void drawBitmapText(float x, float y, const char* text,
                            void* font = GLUT_BITMAP_HELVETICA_12) {
     glRasterPos2f(x, y);
-    for (const char* c = text; *c; c++)
+    for (const char* c = text; *c; c++) {
+        unsigned char uc = (unsigned char)*c;
+        if (uc == 0xC2 && (unsigned char)*(c + 1) == 0xB5) {
+            glutBitmapCharacter(font, 181);
+            c++;
+            continue;
+        }
         glutBitmapCharacter(font, *c);
+    }
 }
 
 inline void drawLabel(float x, float y, const char* text,
@@ -70,8 +77,15 @@ inline void drawLabel(float x, float y, const char* text,
                       const float* col = nullptr) {
     if (col) glColor3fv(col);
     glRasterPos2f(x, y);
-    for (const char* c = text; *c; c++)
+    for (const char* c = text; *c; c++) {
+        unsigned char uc = (unsigned char)*c;
+        if (uc == 0xC2 && (unsigned char)*(c + 1) == 0xB5) {
+            glutBitmapCharacter(font, 181);
+            c++;
+            continue;
+        }
         glutBitmapCharacter(font, *c);
+    }
 }
 
 inline void drawCircle(float cx, float cy, float r, int segments = 24) {

@@ -54,11 +54,11 @@ public:
 
     // Run to completion instantly (comparison mode)
     SearchStats runToCompletion() {
-        auto t0 = std::chrono::high_resolution_clock::now();
+        auto t0 = std::chrono::steady_clock::now();
         while (!isFinished()) step();
-        auto t1 = std::chrono::high_resolution_clock::now();
+        auto t1 = std::chrono::steady_clock::now();
         stats.timeMs =
-            std::chrono::duration<double, std::milli>(t1-t0).count();
+            std::chrono::duration<double, std::milli>(t1 - t0).count();
         return stats;
     }
 

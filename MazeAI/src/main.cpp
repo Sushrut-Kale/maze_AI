@@ -332,7 +332,7 @@ static Button btnCompareAll, btnToggleOverlay;
 static Button btnPhase3BackToConfig, btnPhase3NewMaze;
 
 // Modal / Screen Return
-static Button btnHelpBack, btnLegendBack, btnBackToWorkflow, btnDashOverlay;
+static Button btnHelpBack, btnLegendBack, btnBackToWorkflow, btnDashOverlay, btnDashRerun;
 
 static std::vector<Button*> allButtons;
 
@@ -565,15 +565,18 @@ static void updateUILayout() {
     // Modal / Screen Return Buttons
     btnHelpBack       = Button((float)WIN_W * 0.5f - 80.f, (float)WIN_H - 46.f, 160.f, 30.f, "RETURN");
     btnLegendBack     = Button((float)WIN_W * 0.5f - 80.f, (float)WIN_H - 46.f, 160.f, 30.f, "RETURN");
-    btnBackToWorkflow = Button((float)WIN_W * 0.5f - 180.f, (float)WIN_H - 46.f, 170.f, 32.f, "RETURN TO SOLVING");
+    btnBackToWorkflow = Button((float)WIN_W * 0.5f - 275.f, (float)WIN_H - 46.f, 175.f, 32.f, "RETURN TO SOLVING");
     btnBackToWorkflow.setGreen();
-    btnDashOverlay    = Button((float)WIN_W * 0.5f + 10.f,  (float)WIN_H - 46.f, 170.f, 32.f, overlayComparison ? "OVERLAY: ON" : "OVERLAY: OFF");
+    btnDashOverlay    = Button((float)WIN_W * 0.5f - 90.f,  (float)WIN_H - 46.f, 175.f, 32.f, overlayComparison ? "OVERLAY: ON" : "OVERLAY: OFF");
     btnDashOverlay.setPrimary();
+    btnDashRerun      = Button((float)WIN_W * 0.5f + 95.f,  (float)WIN_H - 46.f, 175.f, 32.f, "RERUN BENCHMARK");
+    btnDashRerun.setAmber();
 
     allButtons.push_back(&btnHelpBack);
     allButtons.push_back(&btnLegendBack);
     allButtons.push_back(&btnBackToWorkflow);
     allButtons.push_back(&btnDashOverlay);
+    allButtons.push_back(&btnDashRerun);
 
     // Calculate maximum scroll range for current phase
     float totalH = 0.f;
@@ -1772,22 +1775,49 @@ static void renderSidebar() {
 static void renderComparisonDashboard() {
     drawPanel(0.f, 0.f, (float)WIN_W, (float)WIN_H, Col::BG_DARK);
 
-    float cx = (float)WIN_W * 0.5f, y = 32.f;
+    // If comparison hasn't been run yet, run all algorithms automatically
+    if (!algoStates[0].hasRun && !algoStates[1].hasRun && !algoStates[2].hasRun && maze.generated && !maze.customers.empty()) {
+        runAllAlgorithms();
+    }
+
+    // Build evaluation data from current algorithm states
+    std::vector<AlgoEvalData> evals;
+    for (int i = 0; i < 3; i++) {
+        AlgoEvalData d;
+        d.name = algoStates[i].name;
+        d.hasRun = algoStates[i].hasRun;
+        d.foundPath = algoStates[i].foundPath;
+        d.totalMoves = algoStates[i].result.totalMoves;
+        d.totalCost = algoStates[i].result.totalCost;
+        d.totalNodesExplored = algoStates[i].result.totalNodesExplored;
+        d.medianTimeMs = algoStates[i].result.benchmark.medianMs;
+        d.singleRunTimeMs = algoStates[i].result.totalTimeMs;
+        d.stopsCompleted = algoStates[i].result.stopsCompleted;
+        d.totalStops = algoStates[i].result.totalStops;
+        evals.push_back(d);
+    }
+    WinnerResult wMoves = computeRouteMovesWinner(evals);
+    WinnerResult wCost  = computeWeightedCostWinner(evals);
+    WinnerResult wNodes = computeFewestNodesWinner(evals);
+    WinnerResult wTime  = computeExecutionTimeWinner(evals);
+    bool allEqual       = checkAllEqualRouteQuality(evals);
+
+    float cx = (float)WIN_W * 0.5f, y = 26.f;
     glColor3fv(Col::TITLE_CYAN);
     int tw = glutBitmapLength(GLUT_BITMAP_HELVETICA_18, (const unsigned char*)"ALGORITHM COMPARISON DASHBOARD");
     drawBitmapText(cx - (float)tw * 0.5f, y, "ALGORITHM COMPARISON DASHBOARD", GLUT_BITMAP_HELVETICA_18);
-    y += 22.f;
+    y += 20.f;
 
     glColor3fv(Col::TEXT_MUTED);
     std::string sub = (deliveryMode == DeliveryMode::SINGLE_TARGET)
-        ? "Comparing BFS, DFS, and A* for Single Customer C" + std::to_string(maze.selectedCustomerId) + " on Identical Maze Snapshot"
-        : "Comparing BFS, DFS, and A* on Ordered Multi-Stop Route: " + (compResults.empty() ? "" : compResults[0].multiRes.stopSequenceStr);
+        ? "Single Customer C" + std::to_string(maze.selectedCustomerId) + " | Monotonic Steady Clock Benchmark (25 runs)"
+        : "Ordered Route: " + (compResults.empty() ? "" : compResults[0].multiRes.stopSequenceStr) + " | Monotonic Benchmark (25 runs)";
     int sw = glutBitmapLength(GLUT_BITMAP_HELVETICA_12, (const unsigned char*)sub.c_str());
     drawBitmapText(cx - (float)sw * 0.5f, y, sub.c_str(), GLUT_BITMAP_HELVETICA_12);
-    y += 24.f;
+    y += 22.f;
 
     float tX = 64.f, tW = (float)WIN_W - 128.f;
-    drawSep(tX, y, tW); y += 18.f;
+    drawSep(tX, y, tW); y += 14.f;
 
     // Table Column Coordinates: Metric | BFS | DFS | A*
     float cMetric = tX;
@@ -1799,24 +1829,30 @@ static void renderComparisonDashboard() {
     glColor3fv(Col::ACCENT);
     drawBitmapText(cMetric, y, "METRIC", GLUT_BITMAP_HELVETICA_12);
     glColor3fv(Col::CYAN);
-    drawBitmapText(cBFS,    y, "BFS (Fewest Moves)", GLUT_BITMAP_HELVETICA_12);
+    drawBitmapText(cBFS,    y, "BFS (FIFO Queue)", GLUT_BITMAP_HELVETICA_12);
     glColor3fv(Col::CORAL);
-    drawBitmapText(cDFS,    y, "DFS (Depth-First)", GLUT_BITMAP_HELVETICA_12);
+    drawBitmapText(cDFS,    y, "DFS (LIFO Stack)", GLUT_BITMAP_HELVETICA_12);
     glColor3fv(Col::START);
-    drawBitmapText(cAStar,  y, "A* (Lowest Weighted Cost)", GLUT_BITMAP_HELVETICA_12);
-    y += 16.f;
-    drawSep(tX, y, tW); y += 16.f;
+    drawBitmapText(cAStar,  y, "A* (f = g + h)", GLUT_BITMAP_HELVETICA_12);
+    y += 14.f;
+    drawSep(tX, y, tW); y += 14.f;
 
     // Optimal values across completed runs
     int   bestMoves = 999999;
     float bestCost  = 999999.f;
     int   bestNodes = 999999;
+    double bestTime = 1e9;
     for (int i = 0; i < 3; i++) {
         const auto& mr = algoStates[i].result;
         if (algoStates[i].hasRun && mr.fullyCompleted) {
             bestMoves = std::min(bestMoves, mr.totalMoves);
             bestCost  = std::min(bestCost,  mr.totalCost);
+        }
+        if (algoStates[i].hasRun) {
             bestNodes = std::min(bestNodes, mr.totalNodesExplored);
+            if (mr.benchmark.medianMs > 0.0005) {
+                bestTime = std::min(bestTime, mr.benchmark.medianMs);
+            }
         }
     }
 
@@ -1834,7 +1870,7 @@ static void renderComparisonDashboard() {
         glColor3fv(colAStar);
         drawBitmapText(cAStar, y, vAStar.c_str(), GLUT_BITMAP_HELVETICA_12);
 
-        y += 24.f;
+        y += 22.f;
     };
 
     // 1. Result status
@@ -1846,46 +1882,46 @@ static void renderComparisonDashboard() {
                    algoStates[1].foundPath ? Col::GREEN_REWARD : Col::RED_PENALTY,
                    algoStates[2].foundPath ? Col::GREEN_REWARD : Col::RED_PENALTY);
 
-    // 2. Success / failure
-    std::string succBfs   = !algoStates[0].hasRun ? "-" : (algoStates[0].foundPath ? "SUCCESS" : "FAILURE");
-    std::string succDfs   = !algoStates[1].hasRun ? "-" : (algoStates[1].foundPath ? "SUCCESS" : "FAILURE");
-    std::string succAStar = !algoStates[2].hasRun ? "-" : (algoStates[2].foundPath ? "SUCCESS" : "FAILURE");
-    renderTableRow("Success / failure", succBfs, succDfs, succAStar,
-                   algoStates[0].foundPath ? Col::GREEN_REWARD : Col::RED_PENALTY,
-                   algoStates[1].foundPath ? Col::GREEN_REWARD : Col::RED_PENALTY,
-                   algoStates[2].foundPath ? Col::GREEN_REWARD : Col::RED_PENALTY);
-
-    // 3. Path length (moves)
+    // 2. Route moves
     auto formatMoves = [&](int idx) -> std::pair<std::string, const float*> {
         if (!algoStates[idx].hasRun) return {"-", Col::TEXT_MUTED};
         if (!algoStates[idx].foundPath) return {"NO PATH", Col::RED_PENALTY};
         int m = algoStates[idx].result.totalMoves;
         std::string s = std::to_string(m) + " moves";
-        if (m == bestMoves) return {s + " (Shortest *)", Col::GREEN_REWARD};
+        if (m == bestMoves) {
+            std::string tag = wMoves.isTie ? " (Shortest * - tie)" : " (Shortest *)";
+            return {s + tag, Col::GREEN_REWARD};
+        }
         return {s + " (+" + std::to_string(m - bestMoves) + ")", Col::TEXT_WHITE};
     };
     auto pBfsMoves = formatMoves(0), pDfsMoves = formatMoves(1), pAStarMoves = formatMoves(2);
-    renderTableRow("Path length (moves)", pBfsMoves.first, pDfsMoves.first, pAStarMoves.first, pBfsMoves.second, pDfsMoves.second, pAStarMoves.second);
+    renderTableRow("Route moves", pBfsMoves.first, pDfsMoves.first, pAStarMoves.first, pBfsMoves.second, pDfsMoves.second, pAStarMoves.second);
 
-    // 4. Weighted route cost
+    // 3. Weighted route cost
     auto formatCost = [&](int idx) -> std::pair<std::string, const float*> {
         if (!algoStates[idx].hasRun) return {"-", Col::TEXT_MUTED};
         if (!algoStates[idx].foundPath) return {"N/A", Col::RED_PENALTY};
         float c = algoStates[idx].result.totalCost;
         std::ostringstream ss; ss << std::fixed << std::setprecision(1) << c;
-        if (c <= bestCost + 0.001f) return {ss.str() + " (Lowest Cost *)", Col::GREEN_REWARD};
+        if (c <= bestCost + 0.001f) {
+            std::string tag = wCost.isTie ? " (Lowest * - tie)" : " (Lowest *)";
+            return {ss.str() + tag, Col::GREEN_REWARD};
+        }
         std::ostringstream diff; diff << " (+" << std::fixed << std::setprecision(1) << (c - bestCost) << ")";
         return {ss.str() + diff.str(), Col::TEXT_WHITE};
     };
     auto pBfsCost = formatCost(0), pDfsCost = formatCost(1), pAStarCost = formatCost(2);
     renderTableRow("Weighted route cost", pBfsCost.first, pDfsCost.first, pAStarCost.first, pBfsCost.second, pDfsCost.second, pAStarCost.second);
 
-    // 5. Expanded nodes
+    // 4. Expanded nodes
     auto formatNodes = [&](int idx) -> std::pair<std::string, const float*> {
         if (!algoStates[idx].hasRun) return {"-", Col::TEXT_MUTED};
         int n = algoStates[idx].result.totalNodesExplored;
         std::string s = std::to_string(n) + " nodes";
-        if (n == bestNodes) return {s + " (Fewest *)", Col::START};
+        if (n == bestNodes) {
+            std::string tag = wNodes.isTie ? " (Fewest * - tie)" : " (Fewest *)";
+            return {s + tag, Col::START};
+        }
         float pct = bestNodes > 0 ? (float)(n - bestNodes) / (float)bestNodes * 100.f : 0.f;
         std::ostringstream diff; diff << " (+" << (int)pct << "%)";
         return {s + diff.str(), Col::TEXT_WHITE};
@@ -1893,13 +1929,30 @@ static void renderComparisonDashboard() {
     auto pBfsNodes = formatNodes(0), pDfsNodes = formatNodes(1), pAStarNodes = formatNodes(2);
     renderTableRow("Expanded nodes", pBfsNodes.first, pDfsNodes.first, pAStarNodes.first, pBfsNodes.second, pDfsNodes.second, pAStarNodes.second);
 
-    // 6. Execution time
-    auto formatTime = [&](int idx) -> std::string {
-        if (!algoStates[idx].hasRun) return "-";
-        std::ostringstream ss; ss << std::fixed << std::setprecision(2) << algoStates[idx].result.totalTimeMs << " ms";
-        return ss.str();
+    // 5. Median search time (25 runs)
+    auto formatMedianTime = [&](int idx) -> std::pair<std::string, const float*> {
+        if (!algoStates[idx].hasRun) return {"-", Col::TEXT_MUTED};
+        double t = algoStates[idx].result.benchmark.medianMs;
+        std::string durStr = formatSearchDuration(t, true);
+        bool isFastest = false;
+        for (const auto& w : wTime.winners) {
+            if (w == algoStates[idx].name) { isFastest = true; break; }
+        }
+        if (isFastest && wTime.isAvailable) {
+            std::string tag = wTime.isTie ? " (Fastest * - tie)" : " (Fastest *)";
+            return {durStr + tag, Col::GREEN_REWARD};
+        }
+        return {durStr, Col::TEXT_WHITE};
     };
-    renderTableRow("Execution time", formatTime(0), formatTime(1), formatTime(2));
+    auto pBfsTime = formatMedianTime(0), pDfsTime = formatMedianTime(1), pAStarTime = formatMedianTime(2);
+    renderTableRow("Median search time", pBfsTime.first, pDfsTime.first, pAStarTime.first, pBfsTime.second, pDfsTime.second, pAStarTime.second);
+
+    // 6. Single-run time
+    auto formatSingleTime = [&](int idx) -> std::string {
+        if (!algoStates[idx].hasRun) return "-";
+        return formatSearchDuration(algoStates[idx].result.totalTimeMs, false);
+    };
+    renderTableRow("Single-run time", formatSingleTime(0), formatSingleTime(1), formatSingleTime(2));
 
     // 7. Stops reached
     auto formatStops = [&](int idx) -> std::string {
@@ -1915,88 +1968,113 @@ static void renderComparisonDashboard() {
     };
     renderTableRow("Shortcuts / Penalties", formatPellets(0), formatPellets(1), formatPellets(2));
 
-    y += 4.f;
-    drawSep(tX, y, tW); y += 18.f;
+    y += 2.f;
+    drawSep(tX, y, tW); y += 14.f;
 
     // ── RELATIVE COMPARISON & WINNER BADGES ──────────────────────
     float cardW = (tW - 20.f) * 0.5f;
-    float cardH = 126.f;
+    float cardH = 132.f;
     float c1X   = tX;
     float c2X   = tX + cardW + 20.f;
 
     // Card 1: Relative Comparisons
     drawPanel(c1X, y, cardW, cardH, Col::CARD_BG, Col::BORDER, 1.0f);
     drawSectionHeader(c1X + 12.f, y + 8.f, "RELATIVE EFFICIENCY & METRIC DELTAS");
-    float cy1 = y + 34.f;
+    float cy1 = y + 30.f;
 
     // Moves difference
-    std::string moveDiffStr = "Move Delta vs Shortest (" + std::to_string(bestMoves) + "): ";
+    std::string moveDiffStr = "Move Delta vs Shortest (" + (bestMoves < 999999 ? std::to_string(bestMoves) : "-") + "): ";
     for (int i = 0; i < 3; i++) {
         if (algoStates[i].hasRun && algoStates[i].foundPath) {
             int d = algoStates[i].result.totalMoves - bestMoves;
             moveDiffStr += algoStates[i].name + (d == 0 ? " [0]" : (" [+" + std::to_string(d) + "]")) + "  ";
         }
     }
-    drawTextTruncated(c1X + 12.f, cy1, moveDiffStr, cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::TEXT_WHITE); cy1 += 22.f;
+    drawTextTruncated(c1X + 12.f, cy1, moveDiffStr, cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::TEXT_WHITE); cy1 += 20.f;
 
     // Cost difference
-    std::ostringstream costDiffSS; costDiffSS << "Cost Delta vs Cheapest (" << std::fixed << std::setprecision(1) << bestCost << "): ";
+    std::ostringstream costDiffSS;
+    costDiffSS << "Cost Delta vs Cheapest (" << (bestCost < 999999.f ? std::to_string((int)bestCost) + ((bestCost == (int)bestCost) ? ".0" : ".5") : "-") << "): ";
     for (int i = 0; i < 3; i++) {
         if (algoStates[i].hasRun && algoStates[i].foundPath) {
             float cd = algoStates[i].result.totalCost - bestCost;
             costDiffSS << algoStates[i].name << (cd <= 0.001f ? " [0.0]" : " [+" + std::to_string((int)cd) + (cd == (int)cd ? ".0" : ".5") + "]") << "  ";
         }
     }
-    drawTextTruncated(c1X + 12.f, cy1, costDiffSS.str(), cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::PRIMARY_BLUE); cy1 += 22.f;
+    drawTextTruncated(c1X + 12.f, cy1, costDiffSS.str(), cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::PRIMARY_BLUE); cy1 += 20.f;
 
     // Nodes Explored Relative
-    std::string nodeDiffStr = "Node Delta vs Fewest (" + std::to_string(bestNodes) + "): ";
+    std::string nodeDiffStr = "Node Delta vs Fewest (" + (bestNodes < 999999 ? std::to_string(bestNodes) : "-") + "): ";
     for (int i = 0; i < 3; i++) {
         if (algoStates[i].hasRun) {
             int nd = algoStates[i].result.totalNodesExplored - bestNodes;
             nodeDiffStr += algoStates[i].name + (nd == 0 ? " [0]" : (" [+" + std::to_string(nd) + "]")) + "  ";
         }
     }
-    drawTextTruncated(c1X + 12.f, cy1, nodeDiffStr, cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::TEXT_MUTED); cy1 += 22.f;
+    drawTextTruncated(c1X + 12.f, cy1, nodeDiffStr, cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::TEXT_MUTED); cy1 += 20.f;
 
-    drawTextTruncated(c1X + 12.f, cy1, "A* balances moves & terrain cost; BFS only optimizes step count.", cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::GREEN_REWARD);
+    // Median Time Delta vs Fastest
+    std::string timeDiffStr = "Median Time vs Fastest: ";
+    if (bestTime < 1e8) {
+        for (int i = 0; i < 3; i++) {
+            if (algoStates[i].hasRun && algoStates[i].result.benchmark.medianMs > 0.0005) {
+                double td = algoStates[i].result.benchmark.medianMs - bestTime;
+                if (td <= 0.002) {
+                    timeDiffStr += algoStates[i].name + " [0 \xc2\xb5s]  ";
+                } else {
+                    double diffUs = td * 1000.0;
+                    timeDiffStr += algoStates[i].name + " [+" + std::to_string((int)std::round(diffUs)) + " \xc2\xb5s]  ";
+                }
+            }
+        }
+    } else {
+        timeDiffStr += "N/A";
+    }
+    drawTextTruncated(c1X + 12.f, cy1, timeDiffStr, cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::TITLE_CYAN); cy1 += 20.f;
+
+    drawTextTruncated(c1X + 12.f, cy1, "A* balances moves & terrain cost; BFS optimizes step count only.", cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::GREEN_REWARD);
 
     // Card 2: Winners & Honest Takeaways
     drawPanel(c2X, y, cardW, cardH, Col::CARD_BG, Col::BORDER, 1.0f);
     drawSectionHeader(c2X + 12.f, y + 8.f, "RUN WINNERS & ALGORITHMIC GUARANTEES");
-    float cy2 = y + 34.f;
+    float cy2 = y + 30.f;
 
-    // Best Cost Winner
-    std::string costWin = "Lowest Weighted Cost: ";
-    for (int i = 0; i < 3; i++) {
-        if (algoStates[i].hasRun && algoStates[i].foundPath && algoStates[i].result.totalCost <= bestCost + 0.001f) {
-            costWin += algoStates[i].name + " ";
-        }
+    std::string moveWin = "Fewest Moves -- " + wMoves.summary;
+    drawTextTruncated(c2X + 12.f, cy2, moveWin, cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::CYAN); cy2 += 20.f;
+
+    std::string costWin = "Lowest Weighted Cost -- " + wCost.summary;
+    drawTextTruncated(c2X + 12.f, cy2, costWin, cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::START); cy2 += 20.f;
+
+    std::string nodeWin = "Fewest Expanded Nodes -- " + wNodes.summary;
+    drawTextTruncated(c2X + 12.f, cy2, nodeWin, cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::TEXT_WHITE); cy2 += 20.f;
+
+    std::string timeWin = "Fastest Median Search -- " + wTime.summary;
+    drawTextTruncated(c2X + 12.f, cy2, timeWin, cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::GREEN_REWARD); cy2 += 20.f;
+
+    if (allEqual) {
+        drawTextTruncated(c2X + 12.f, cy2, "Equal quality: Different search strategies found identical paths.", cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::ACCENT);
+    } else {
+        drawTextTruncated(c2X + 12.f, cy2, "Measured winners reflect this specific maze & customer order.", cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::TEXT_MUTED);
     }
-    drawTextTruncated(c2X + 12.f, cy2, costWin + "(Minimum fuel / delivery transit expense)", cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::START); cy2 += 22.f;
 
-    // Best Moves Winner
-    std::string moveWin = "Fewest Route Moves: ";
-    for (int i = 0; i < 3; i++) {
-        if (algoStates[i].hasRun && algoStates[i].foundPath && algoStates[i].result.totalMoves == bestMoves) {
-            moveWin += algoStates[i].name + " ";
-        }
+    // Card 3: Algorithm Characteristics & Guarantees
+    float c3Y = y + cardH + 12.f;
+    float c3H = 92.f;
+    drawPanel(tX, c3Y, tW, c3H, Col::CARD_BG, Col::BORDER, 1.0f);
+    drawSectionHeader(tX + 12.f, c3Y + 8.f, "ALGORITHM SEARCH PROPERTIES & GUARANTEES");
+    float cy3 = c3Y + 28.f;
+    drawTextTruncated(tX + 12.f, cy3, "BFS:  FIFO queue. Guarantees minimum moves (unweighted shortest path). Ignores road terrain weights.", tW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::CYAN); cy3 += 18.f;
+    drawTextTruncated(tX + 12.f, cy3, "DFS:  LIFO stack. No move or cost optimality guarantees; behavior depends entirely on traversal order.", tW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::CORAL); cy3 += 18.f;
+    drawTextTruncated(tX + 12.f, cy3, "A*:   Priority queue on f(n)=g(n)+h(n). Guarantees optimal weighted cost when heuristic h(n) is admissible.", tW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::START); cy3 += 18.f;
+    if (allEqual) {
+        drawTextTruncated(tX + 12.f, cy3, "Note: On simple corridors, BFS, DFS, and A* can find equal routes while exploring different node counts.", tW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::TEXT_WHITE);
+    } else {
+        drawTextTruncated(tX + 12.f, cy3, "Note: Concatenated multi-stop legs preserve start-to-goal continuity without double-counting shared stop points.", tW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::TEXT_MUTED);
     }
-    drawTextTruncated(c2X + 12.f, cy2, moveWin + "(BFS unweighted hop-count optimality)", cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::CYAN); cy2 += 22.f;
-
-    // Fewest Nodes Winner
-    std::string nodeWin = "Fewest Expanded Nodes: ";
-    for (int i = 0; i < 3; i++) {
-        if (algoStates[i].hasRun && algoStates[i].result.totalNodesExplored == bestNodes) {
-            nodeWin += algoStates[i].name + " ";
-        }
-    }
-    drawTextTruncated(c2X + 12.f, cy2, nodeWin + "(Admissible heuristic pruning efficiency)", cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::TEXT_WHITE); cy2 += 22.f;
-
-    drawTextTruncated(c2X + 12.f, cy2, "DFS explores deeply without distance guarantees; measured independently.", cardW - 24.f, GLUT_BITMAP_HELVETICA_10, Col::CORAL);
 
     btnBackToWorkflow.draw();
     btnDashOverlay.draw();
+    btnDashRerun.draw();
 }
 
 // ════════════════════════════════════════════════════════════
@@ -2212,6 +2290,8 @@ static void mouse(int button, int state, int x, int y) {
         } else if (btnDashOverlay.isClicked((float)x, (float)y)) {
             overlayComparison = !overlayComparison;
             updateUILayout();
+        } else if (btnDashRerun.isClicked((float)x, (float)y)) {
+            runAllAlgorithms();
         }
         glutPostRedisplay();
         return;
@@ -2314,6 +2394,7 @@ static void mouseMotion(int x, int y) {
     if (appState == AppState::COMPARING) {
         btnBackToWorkflow.updateHover((float)x, (float)y);
         btnDashOverlay.updateHover((float)x, (float)y);
+        btnDashRerun.updateHover((float)x, (float)y);
         glutPostRedisplay();
         return;
     }
@@ -2391,7 +2472,11 @@ static void keyboard(unsigned char key, int x, int y) {
             statusMsg = "Selected: A* (Lowest Cost)";
             break;
         case 'r': case 'R':
-            runAlgorithm(selectedAlgoIdx);
+            if (appState == AppState::COMPARING) {
+                runAllAlgorithms();
+            } else {
+                runAlgorithm(selectedAlgoIdx);
+            }
             break;
         case 'a': case 'A':
             runAllAlgorithms();
